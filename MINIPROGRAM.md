@@ -8,7 +8,7 @@
 
 ```js
 module.exports = {
-  API_BASE: 'https://你的-TiGame-域名',
+  API_BASE: 'https://tigame.cavendish.dpdns.org',
 };
 ```
 
@@ -16,8 +16,8 @@ module.exports = {
 
 在微信公众平台把同一个域名加入：
 
-- **request 合法域名**：`https://你的-TiGame-域名`
-- **socket 合法域名**：`wss://你的-TiGame-域名`
+- **request 合法域名**：`https://tigame.cavendish.dpdns.org`
+- **socket 合法域名**：`wss://tigame.cavendish.dpdns.org`
 
 开发者工具本机调试时可以临时关闭“校验合法域名”，但真机预览/正式版不能依赖这个开关。
 
