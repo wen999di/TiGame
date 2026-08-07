@@ -6,15 +6,17 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "install:ci": "npm ci",
+    "install:ci": "corepack pnpm install --frozen-lockfile",
     "dev": "vite",
     "build": "node scripts/build-cloudflare.mjs",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --experimental-strip-types --test tests/deal-cards.test.mjs tests/room-logic.test.mjs tests/challenge.test.mjs tests/mahjong.test.mjs",
+    "test": "node scripts/build-cloudflare.mjs && node --experimental-strip-types --test tests/deal-cards.test.mjs tests/room-logic.test.mjs tests/challenge.test.mjs tests/mahjong.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "check:miniprogram": "node --check miniprogram/app.js && node --check miniprogram/config.js && node --check miniprogram/utils/api.js && node --check miniprogram/utils/profile.js && node --check miniprogram/pages/index/index.js"
+    "check:miniprogram": "node --check miniprogram/app.js && node --check miniprogram/config.js && node --check miniprogram/utils/api.js && node --check miniprogram/utils/profile.js && node --check miniprogram/pages/index/index.js",
+    "dev:miniprogram": "node scripts/open-wechat-devtools.mjs",
+    "dev:miniprogram:check": "node scripts/open-wechat-devtools.mjs --check"
   },
   "dependencies": {
     "jsqr": "^1.4.0",
@@ -43,5 +45,6 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
-  "displayName": "TiGame｜在线房间"
+  "displayName": "TiGame｜在线房间",
+  "packageManager": "pnpm@10.15.0"
 }

@@ -27,20 +27,20 @@ scripts/               构建与部署脚本
 ### 环境要求
 
 - Node.js >= 22.13（推荐 22 或 24 的 LTS 版本）
-- npm（随 Node.js 一起安装）
+- pnpm 10.15（仓库通过 Corepack 锁定版本；首次可执行 `corepack enable`）
 
 ### 首次准备
 
 ```bash
-npm install
+pnpm install
 ```
 
-`wrangler.jsonc` 是本地运行与部署共用的 Worker 配置（Durable Object 绑定等）。仓库当前已有该文件，但它被 `.gitignore` 忽略，克隆后若缺失，请按下方「部署」章节的配置自行创建，否则 `npm run dev` 会因缺少配置而失败。
+`wrangler.jsonc` 是本地运行与部署共用的 Worker 配置（Durable Object 绑定等）。仓库当前已有该文件，但它被 `.gitignore` 忽略，克隆后若缺失，请按下方「部署」章节的配置自行创建，否则 `pnpm dev` 会因缺少配置而失败。
 
 ### 启动本地服务
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 启动后：
@@ -54,17 +54,19 @@ npm run dev
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run dev` | 启动本地开发服务（前端 + Worker，支持热更新） |
-| `npm test` | 构建后运行单元测试 |
-| `npm run lint` | ESLint 代码检查 |
-| `npm run build` | 构建生产产物（同 `build:cloudflare`） |
-| `npm run deploy:cloudflare` | 构建并部署到 Cloudflare |
+| `pnpm dev` | 启动本地开发服务（前端 + Worker，支持热更新） |
+| `pnpm test` | 构建后运行单元测试 |
+| `pnpm lint` | ESLint 代码检查 |
+| `pnpm build` | 构建生产产物（同 `build:cloudflare`） |
+| `pnpm deploy:cloudflare` | 构建并部署到 Cloudflare |
+| `pnpm dev:miniprogram` | Windows 上自动打开微信开发者工具并载入本项目 |
+| `pnpm dev:miniprogram:check` | 仅检查小程序工程结构（容器内可运行） |
 
 ### 调试提示
 
 - 用两个浏览器窗口（或隐身窗口 + 手机）分别扮演房主和加入者，方便联调 WebSocket 与房间状态同步。
-- 前端与 Worker 的日志都会输出在 `npm run dev` 的终端；房间逻辑在 `worker/game-room.ts`，HTTP 接口在 `app/api/`，WebSocket 入口在 `worker/index.ts`。
-- 修改 `app/` 下代码会触发前端热更新，修改 `worker/` 下代码会自动重载 Worker（未生效时重启 `npm run dev` 即可）。
+- 前端与 Worker 的日志都会输出在 `pnpm dev` 的终端；房间逻辑在 `worker/game-room.ts`，HTTP 接口在 `app/api/`，WebSocket 入口在 `worker/index.ts`。
+- 修改 `app/` 下代码会触发前端热更新，修改 `worker/` 下代码会自动重载 Worker（未生效时重启 `pnpm dev` 即可）。
 - 局域网设备访问失败时，检查 Windows 防火墙是否放行 Node.js，并确认设备与电脑在同一网络。
 
 ## 部署
@@ -74,7 +76,7 @@ npm run dev
 1. 登录 Cloudflare：
 
    ```bash
-   npx wrangler login
+   pnpm exec wrangler login
    ```
 
 2. 在项目根目录新建 `wrangler.jsonc`：
@@ -98,9 +100,9 @@ npm run dev
 3. 安装依赖并部署：
 
    ```bash
-   npm install
-   npm run build
-   npm run deploy:cloudflare
+   pnpm install
+   pnpm build
+   pnpm deploy:cloudflare
    ```
 
 ## 微信小程序

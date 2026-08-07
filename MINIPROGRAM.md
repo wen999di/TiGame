@@ -21,9 +21,22 @@ module.exports = {
 
 开发者工具本机调试时可以临时关闭“校验合法域名”，但真机预览/正式版不能依赖这个开关。
 
-## 2. 配置 AppID
+## 2. 打开微信开发者工具与 AppID
 
-用微信开发者工具打开仓库根目录，工具会读取 `project.config.json`，将其中 `appid` 设置成该小程序自己的 AppID（没有写死其他项目的 AppID）。
+在 Windows 开发机上执行：
+
+```bash
+pnpm dev:miniprogram
+```
+脚本会参考 `ynes` 项目的做法，自动寻找微信开发者工具的 `cli.bat`，首次找不到时允许手工输入，并把路径保存在仓库外的本机用户配置中。它会通过官方 CLI 的 `-o <项目目录>` 打开仓库根目录。
+
+在 Linux Docker 容器内无法直接启动 Windows 宿主机 GUI，可以先执行：
+
+```bash
+pnpm dev:miniprogram:check
+```
+
+当前 `project.config.json` 的 `appid` 保持为空，不会借用其他项目的 AppID。没有正式 AppID 时可以先做工程结构、WXML/WXSS/JS 等静态检查。微信开发者工具的项目导入、预览、真机以及依赖帐号身份的能力，建议先申请微信提供的测试号，之后再替换为正式 AppID。
 
 ## 3. 微信头像与昵称
 
