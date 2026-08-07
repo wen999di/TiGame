@@ -27,7 +27,7 @@ scripts/               构建与部署脚本
 ### 环境要求
 
 - Node.js >= 22.13（推荐 22 或 24 的 LTS 版本）
-- pnpm 10.15（仓库通过 Corepack 锁定版本；首次可执行 `corepack enable`）
+- pnpm 11.20（仓库通过 `packageManager` 锁定版本；推荐先执行 `corepack enable`）
 
 ### 首次准备
 
