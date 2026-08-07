@@ -1,0 +1,18 @@
+{
+  "description": "TiGame 微信小程序",
+  "miniprogramRoot": "miniprogram/",
+  "compileType": "miniprogram",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": false,
+    "urlCheck": true,
+    "coverView": true,
+    "enhance": true,
+    "showShadowRootInWxmlPanel": true,
+    "packNpmManually": false
+  },
+  "appid": "",
+  "projectname": "TiGame-WeChat",
+  "condition": {}
+}

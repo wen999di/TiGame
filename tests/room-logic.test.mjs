@@ -522,6 +522,20 @@ test("approving a join request with a duplicate nickname is rejected", () => {
   assert.equal(result.state.players.length, 1);
 });
 
+test("wechat avatar thumbnails survive room creation, projection and join approval", () => {
+  const avatar = "data:image/jpeg;base64,AA==";
+  let room = createRoomState("ABC-123", "host", "房主", { maxPlayers: 16 }, avatar);
+  assert.equal(room.players[0].avatarData, avatar);
+  assert.equal(publicRoom(room, { playerId: "host", isHost: true }).players[0].avatarData, avatar);
+
+  room = {
+    ...room,
+    pendingJoinRequests: [{ id: "newbie", playerName: "新人", avatarData: avatar, createdAt: Date.now() }],
+  };
+  const approved = approveJoinRequest(room, "newbie", true);
+  assert.equal(approved.state.players.find((player) => player.id === "newbie")?.avatarData, avatar);
+});
+
 test("room-level enterGame/backToLobby and publicRoom privacy", () => {
   let state = createRoomState("ABC-123", "host", "房主", { maxPlayers: 8 });
   state = {

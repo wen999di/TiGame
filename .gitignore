@@ -43,3 +43,5 @@ next-env.d.ts
 /work/
 
 # cloudflare（部署配置提交版本库，密钥放环境变量/secret，见 B051）
+project.private.config.json
+miniprogram/config.local.js

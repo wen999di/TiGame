@@ -13,7 +13,8 @@
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "start": "vinext start",
     "test": "npm run build && node --experimental-strip-types --test tests/deal-cards.test.mjs tests/room-logic.test.mjs tests/challenge.test.mjs tests/mahjong.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "check:miniprogram": "node --check miniprogram/app.js && node --check miniprogram/config.js && node --check miniprogram/utils/api.js && node --check miniprogram/utils/profile.js && node --check miniprogram/pages/index/index.js"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

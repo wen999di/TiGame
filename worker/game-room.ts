@@ -153,6 +153,14 @@ function nameCompareKey(name: string): string {
   }
 }
 
+/** 微信头像只作为房间内展示用的小缩略图。客户端会先压缩到约 40–56px；
+ * 服务端再次做协议/长度校验，避免把任意超大 data URL 塞进 Durable Object 快照。 */
+function sanitizeAvatarData(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > 4_096) return undefined;
+  if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(value)) return undefined;
+  return value;
+}
+
 function sameStringList(left: readonly string[], right: readonly string[]) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
@@ -303,6 +311,7 @@ export class GameRoom {
       roomId?: string;
       hostName?: string;
       settings?: Partial<RoomSettings>;
+      hostAvatarData?: string;
     } | null;
     const roomId = normalizeRoomId(payload?.roomId);
     if (!ROOM_ID_PATTERN.test(roomId) || !payload) {
@@ -317,7 +326,7 @@ export class GameRoom {
       if (existing) return;
       const hostId = crypto.randomUUID();
       const token = crypto.randomUUID();
-      this.roomState = createRoomState(roomId, hostId, hostName, settings);
+      this.roomState = createRoomState(roomId, hostId, hostName, settings, sanitizeAvatarData(payload.hostAvatarData));
       this.syncAllOfflineState();
       this.tokens = {
         [hostId]: [{ token, kind: "host", issuedAt: Date.now(), expiresAt: null }],
@@ -340,6 +349,7 @@ export class GameRoom {
     const payload = (await request.json().catch(() => null)) as {
       roomId?: string;
       playerName?: string;
+      avatarData?: string;
       resumePlayerId?: string;
       resumeToken?: string;
     } | null;
@@ -381,9 +391,11 @@ export class GameRoom {
     }
     const playerId = crypto.randomUUID();
     const token = crypto.randomUUID();
+    const avatarData = sanitizeAvatarData(payload.avatarData);
     const requestEntry: PendingJoinRequest = {
       id: playerId,
       playerName,
+      ...(avatarData ? { avatarData } : {}),
       createdAt: Date.now(),
     };
     this.roomState = {

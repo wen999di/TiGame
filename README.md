@@ -102,3 +102,8 @@ npm run dev
    npm run build
    npm run deploy:cloudflare
    ```
+
+## 微信小程序
+
+仓库内已包含原生微信小程序客户端 `miniprogram/`，与网页版复用同一套 Cloudflare Worker / Durable Object 房间后端。
+配置、合法域名以及头像昵称能力说明见 [`MINIPROGRAM.md`](./MINIPROGRAM.md)。
