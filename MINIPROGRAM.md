@@ -16,6 +16,16 @@ pnpm dev:miniprogram:local
 - `dev:miniprogram:cloud`：直接打开仓库小程序工程，连接 `https://tigame.cavendish.dpdns.org`。`pnpm dev:miniprogram` 保留为它的兼容别名。
 - `dev:miniprogram:local`：自动启动或复用本地 `pnpm dev`（端口 `5173`），检测电脑私有局域网 IPv4，并生成 `.wechat-devtools/local/` 临时小程序工程，API 使用 `http://<电脑局域网IP>:5173`，WebSocket 使用对应的 `ws://`。生成工程会关闭合法域名校验，且 `miniprogram/` 源码变化会同步过去。`.wechat-devtools/local/` 仅用于调试，不应直接编辑；源码始终修改仓库中的 `miniprogram/`。
 
+如果只想构建/检查并持续 watch，不希望命令自动打开微信开发者工具，可使用：
+
+```bash
+pnpm build:miniprogram          # 云端源码：持续语法/工程校验，不打开 DevTools
+pnpm build:miniprogram:cloud    # 与上面等价的显式别名
+pnpm build:miniprogram:local    # 生成本地临时工程并持续同步，不打开 DevTools
+```
+
+TiGame 小程序是原生微信小程序，没有 Taro/webpack 的额外 dist 编译阶段；云端源码本身就是可直接被微信开发者工具读取的构建产物。因此 `build:miniprogram` 的职责是先完整校验工程和 JavaScript，再监听 `miniprogram/` 与 `project.config.json` 的变化并重复校验。`build:miniprogram:local` 则复用 local 调试器的生成/同步逻辑，只关闭自动打开 DevTools 的步骤。
+
 本地模式不会修改仓库中的云端 `miniprogram/config.js`，因此不会出现调试结束后忘记切回正式 API 的问题。真机本地调试时手机和电脑必须处于同一 LAN/Wi-Fi；若自动选择网卡不正确，可执行 `pnpm dev:miniprogram:local -- --ip 192.168.x.x`。Windows 防火墙需要允许 Node/Vite 的 TCP 5173 入站。
 
 微信公众平台正式环境仍需配置：

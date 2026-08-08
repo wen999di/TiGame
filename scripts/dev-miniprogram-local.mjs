@@ -19,16 +19,17 @@ const LOCAL_PORT = 5173;
 const LOOPBACK_BASE = `http://127.0.0.1:${LOCAL_PORT}`;
 
 function printHelp() {
-  console.log(`Usage: pnpm dev:miniprogram:local [options]\n\nOptions:\n  --ip <IPv4>   Use a specific private LAN IPv4 address\n  --check       Generate and validate the local DevTools project only\n  --help        Show this help\n\nThe normal mode starts or reuses TiGame on port ${LOCAL_PORT}, detects a LAN address,\nand opens a generated Mini Program project against http://<PC-IP>:${LOCAL_PORT}.`);
+  console.log(`Usage: pnpm dev:miniprogram:local [options]\n\nOptions:\n  --ip <IPv4>   Use a specific private LAN IPv4 address\n  --check       Generate and validate the local DevTools project only\n  --no-open     Build/sync and keep watching without opening WeChat DevTools\n  --help        Show this help\n\nThe normal mode starts or reuses TiGame on port ${LOCAL_PORT}, detects a LAN address,\nand opens a generated Mini Program project against http://<PC-IP>:${LOCAL_PORT}.`);
 }
 
 function parseArgs(argv) {
-  const result = { ip: "", check: false, help: false };
+  const result = { ip: "", check: false, noOpen: false, help: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--") continue;
     if (arg === "--help" || arg === "-h") result.help = true;
     else if (arg === "--check") result.check = true;
+    else if (arg === "--no-open") result.noOpen = true;
     else if (arg === "--ip") {
       result.ip = argv[++index] || "";
       if (!result.ip) throw new Error("--ip requires a private IPv4 address.");
@@ -240,11 +241,15 @@ async function main() {
     console.log(`Detected LAN interface: ${lan.name}`);
     console.log("DevTools URL/domain validation: off for generated local project");
     console.log(`Generated project: ${GENERATED_ROOT}`);
-    console.log("Opening WeChat DevTools...\n");
-    await runOpenScript(false);
+    if (options.noOpen) {
+      console.log("WeChat DevTools auto-open: disabled\n");
+    } else {
+      console.log("Opening WeChat DevTools...\n");
+      await runOpenScript(false);
+    }
 
     watcher = startSourceWatcher(apiBase);
-    console.log("Ready for local Mini Program debugging.");
+    console.log(options.noOpen ? "Ready for local Mini Program build/watch." : "Ready for local Mini Program debugging.");
     console.log(`- API/WebSocket: ${apiBase}`);
     console.log("- Source changes under miniprogram/ are mirrored into the generated project");
     console.log("- Keep phone and PC on the same LAN/Wi-Fi for true-device debugging");
