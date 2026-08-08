@@ -3,12 +3,12 @@
   "miniprogramRoot": "dist/miniapp/",
   "compileType": "miniprogram",
   "setting": {
-    "es6": true,
-    "postcss": true,
+    "es6": false,
+    "postcss": false,
     "minified": false,
     "urlCheck": true,
     "coverView": true,
-    "enhance": true,
+    "enhance": false,
     "showShadowRootInWxmlPanel": true,
     "packNpmManually": false
   },

@@ -5,6 +5,24 @@ page {
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
+/*
+ * @tarojs/plugin-html 会把 HTML 标签映射为 h5-* 类，同时不保留网页端的
+ * 通配符 box-sizing 重置。这里显式恢复网页端的 border-box 盒模型，避免
+ * padding / border 让小程序里的元素尺寸比浏览器端更大。
+ */
+page,
+.h5-html, .h5-body, .h5-div, .h5-form,
+.h5-h1, .h5-h2, .h5-p, .h5-span, .h5-em,
+.h5-i, .h5-small, .h5-strong, .h5-button,
+.h5-input, .h5-select, .h5-svg, .h5-video,
+.h5-main, .h5-section, .h5-header, .h5-label,
+.h5-img {
+  box-sizing: border-box;
+}
+
+/* plugin-html 会把 span 映射成 View；补回浏览器的 inline 语义。 */
+.h5-span { display: inline; }
+
 body, #app, .taro_page, .screen-motion {
   min-height: 100vh;
 }
