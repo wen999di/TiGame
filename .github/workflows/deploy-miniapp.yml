@@ -44,16 +44,15 @@ jobs:
 
       - name: Prepare WeChat Mini Program CI
         env:
-          WECHAT_MINIAPP_APP_ID_VALUE: ${{ vars.WECHAT_MINIAPP_APP_ID }}
           WECHAT_MINIAPP_UPLOAD_KEY_VALUE: ${{ secrets.WECHAT_MINIAPP_UPLOAD_KEY }}
           WECHAT_MINIAPP_CI_ROBOT_VALUE: ${{ vars.WECHAT_MINIAPP_CI_ROBOT || '1' }}
         run: |
           set -eu
-          appid="$WECHAT_MINIAPP_APP_ID_VALUE"
+          appid=$(node -p "require('./project.config.json').appid")
           robot="$WECHAT_MINIAPP_CI_ROBOT_VALUE"
 
           if ! printf '%s' "$appid" | grep -Eq '^wx[0-9A-Za-z]{16}$'; then
-            echo "::error::Missing or invalid Repository Variable WECHAT_MINIAPP_APP_ID"
+            echo "::error::Invalid AppID in project.config.json"
             exit 1
           fi
           if [ -z "$WECHAT_MINIAPP_UPLOAD_KEY_VALUE" ]; then

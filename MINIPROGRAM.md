@@ -45,17 +45,9 @@ pnpm dev:miniprogram
 pnpm dev:miniprogram:check
 ```
 
-仓库中的 `project.config.json` 暂时保持空 `appid`，不会借用其他项目的 AppID。没有 AppID 时可先用 `pnpm dev:miniprogram:check` 做工程结构、WXML/WXSS/JS 等静态检查。微信开发者工具 CLI 的 `-o <项目目录>` 要求项目已有 AppID，因此完全没有 AppID 时 `pnpm dev:miniprogram` 会直接报错，避免只打开开发者工具首页却误报“项目已打开”。
+仓库中的 `project.config.json` 已配置正式 AppID `wx3401664ce3ed7449`，因此 Windows 上执行 `pnpm dev:miniprogram` 时可以直接通过 CLI 打开 TiGame 小程序工程。`pnpm dev:miniprogram:check` 仍可用于不启动 GUI 的工程结构、WXML/WXSS/JS 静态检查。
 
-拿到测试号后，推荐在本机根目录创建已被 `.gitignore` 忽略的 `project.private.config.json`，只保存本机测试 AppID，例如：
-
-```json
-{
-  "appid": "wx你的测试号AppID"
-}
-```
-
-开发者工具会优先采用私有配置中的 AppID，`pnpm dev:miniprogram` 也会按相同优先级检查；正式 AppID 下来后再决定是否写入公共的 `project.config.json`。
+`project.private.config.json` 仍被 `.gitignore` 忽略，可在确有需要时作为本机临时覆盖配置；正常开发不需要再单独设置 AppID。若本机以前创建过包含其他 AppID 的私有配置，应删除其中的 `appid` 或删除该文件，避免微信开发者工具优先采用旧 AppID。
 
 ## 3. 微信头像与昵称
 
@@ -83,14 +75,13 @@ pnpm dev:miniprogram:check
 
 需要在 GitHub Repository Settings -> Secrets and variables -> Actions 中配置：
 
-- Repository Variable `WECHAT_MINIAPP_APP_ID`：小程序 AppID，例如 `wx...`。AppID 不是敏感信息，因此使用 Variable。
-- Repository Secret `WECHAT_MINIAPP_UPLOAD_KEY`：微信公众平台生成的“小程序代码上传密钥”全文。它不是 App Secret，不要把 App Secret 填到这里。
+- Repository Secret `WECHAT_MINIAPP_UPLOAD_KEY`：微信公众平台生成的“小程序代码上传密钥”全文。它不是 App Secret，不要把 App Secret 填到这里。AppID 直接读取仓库中的 `project.config.json`，不需要额外配置 GitHub Variable。
 - Repository Variable `WECHAT_MINIAPP_CI_ROBOT`：可选，固定上传机器人编号 `1` 到 `30`，默认 `1`。
 - Repository Variable `WECHAT_MINIAPP_CI_RUNNER`：可选，默认 `ubuntu-latest`。如果代码上传密钥启用了 IP 白名单，应改为具有固定出口 IP 的 self-hosted runner label。
 - Repository Variable `WECHAT_MINIAPP_CI_ENABLED`：最后设置为 `1` 才真正启用自动上传；未设置时 job 会跳过，不会因为尚未拿到 AppID/上传密钥而让 `main` CI 失败。
 
-CI 会把上传密钥写入 Runner 临时目录并设置为仅当前用户可读，上传结束后无论成功失败都会删除。AppID 直接通过 `miniprogram-ci --appid` 传入，因此仓库中的 `project.config.json` 可以继续保持空 `appid`，本机调试仍可使用 `project.private.config.json`。
+CI 会把上传密钥写入 Runner 临时目录并设置为仅当前用户可读，上传结束后无论成功失败都会删除。Workflow 会从仓库 `project.config.json` 读取 AppID，再通过 `miniprogram-ci --appid` 显式传入，确保本机调试和 CI 使用同一个小程序身份。
 
 上传版本号格式为 `0.<GitHub Run Number>.<Run Attempt>`，说明中包含 `main` 与短 commit SHA。第一次成功上传后，到微信公众平台把固定 robot 上传的开发版本设为“体验版”一次；以后 CI 持续使用同一个 robot 上传即可更新同一体验入口。每次 workflow 还会保存 `wechat-trial-entry` Artifact，并在 Job Summary 中写出固定体验入口 URL。
 
-启用顺序建议是：先配置 AppID、上传密钥和可选 robot/runner，确认上传密钥的 IP 白名单策略，再最后添加 `WECHAT_MINIAPP_CI_ENABLED=1`。小程序代码上传本身不需要微信 App Secret。
+启用顺序建议是：先在 GitHub 配置上传密钥和可选 robot/runner，确认上传密钥的 IP 白名单策略，再最后添加 `WECHAT_MINIAPP_CI_ENABLED=1`。小程序代码上传本身不需要微信 App Secret。
