@@ -1,0 +1,109 @@
+name: Deploy WeChat Mini Program
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - miniprogram/**
+      - project.config.json
+      - package.json
+      - scripts/upload-wechat-miniapp.sh
+      - .github/workflows/deploy-miniapp.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wechat-miniapp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.WECHAT_MINIAPP_CI_ENABLED == '1' }}
+    runs-on: ${{ vars.WECHAT_MINIAPP_CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Mini Program source
+        run: pnpm run check:miniprogram
+
+      - name: Prepare WeChat Mini Program CI
+        env:
+          WECHAT_MINIAPP_APP_ID_VALUE: ${{ vars.WECHAT_MINIAPP_APP_ID }}
+          WECHAT_MINIAPP_UPLOAD_KEY_VALUE: ${{ secrets.WECHAT_MINIAPP_UPLOAD_KEY }}
+          WECHAT_MINIAPP_CI_ROBOT_VALUE: ${{ vars.WECHAT_MINIAPP_CI_ROBOT || '1' }}
+        run: |
+          set -eu
+          appid="$WECHAT_MINIAPP_APP_ID_VALUE"
+          robot="$WECHAT_MINIAPP_CI_ROBOT_VALUE"
+
+          if ! printf '%s' "$appid" | grep -Eq '^wx[0-9A-Za-z]{16}$'; then
+            echo "::error::Missing or invalid Repository Variable WECHAT_MINIAPP_APP_ID"
+            exit 1
+          fi
+          if [ -z "$WECHAT_MINIAPP_UPLOAD_KEY_VALUE" ]; then
+            echo "::error::Missing Repository Secret WECHAT_MINIAPP_UPLOAD_KEY"
+            exit 1
+          fi
+          case "$robot" in
+            ''|*[!0-9]*) echo "::error::WECHAT_MINIAPP_CI_ROBOT must be 1-30"; exit 1 ;;
+          esac
+          if [ "$robot" -lt 1 ] || [ "$robot" -gt 30 ]; then
+            echo "::error::WECHAT_MINIAPP_CI_ROBOT must be 1-30"
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/wechat-miniapp-upload.key"
+          printf '%s' "$WECHAT_MINIAPP_UPLOAD_KEY_VALUE" > "$key_path"
+          chmod 600 "$key_path"
+
+          short_sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
+          echo "WECHAT_MINIAPP_APP_ID=$appid" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_PRIVATE_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_CI_ROBOT=$robot" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_VERSION=0.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_DESC=main $short_sha" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_PROJECT_PATH=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          echo "WECHAT_MINIAPP_TRIAL_ENTRY_PATH=$RUNNER_TEMP/wechat-trial-entry.txt" >> "$GITHUB_ENV"
+
+      - name: Upload WeChat Mini Program
+        run: pnpm run deploy:miniprogram:ci
+
+      - name: Publish trial-entry artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wechat-trial-entry
+          path: ${{ runner.temp }}/wechat-trial-entry.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write deployment summary
+        run: |
+          entry_url=$(cat "$RUNNER_TEMP/wechat-trial-entry.txt")
+          {
+            echo "### WeChat Mini Program uploaded"
+            echo "- CI robot: ${WECHAT_MINIAPP_CI_ROBOT}"
+            echo "- Version: ${WECHAT_MINIAPP_VERSION}"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Trial entry: \`${entry_url}\`"
+            echo "- First bootstrap only: select this robot's uploaded code as the experience version in the WeChat Mini Program console."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove WeChat upload private key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/wechat-miniapp-upload.key"

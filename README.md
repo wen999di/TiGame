@@ -61,6 +61,7 @@ pnpm dev
 | `pnpm deploy:cloudflare` | 构建并部署到 Cloudflare |
 | `pnpm dev:miniprogram` | Windows 上通过 `WECHAT_DEVTOOLS_CLI_PATH` 指定的 CLI 打开微信开发者工具并载入本项目 |
 | `pnpm dev:miniprogram:check` | 仅检查小程序工程结构（容器内可运行） |
+| `pnpm deploy:miniprogram:ci` | 使用微信官方 miniprogram-ci 上传小程序（主要供 GitHub Actions 使用） |
 
 ### 调试提示
 

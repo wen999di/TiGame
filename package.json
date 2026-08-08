@@ -16,7 +16,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "check:miniprogram": "node --check miniprogram/app.js && node --check miniprogram/config.js && node --check miniprogram/utils/api.js && node --check miniprogram/utils/profile.js && node --check miniprogram/pages/index/index.js",
     "dev:miniprogram": "node scripts/open-wechat-devtools.mjs",
-    "dev:miniprogram:check": "node scripts/open-wechat-devtools.mjs --check"
+    "dev:miniprogram:check": "node scripts/open-wechat-devtools.mjs --check",
+    "deploy:miniprogram:ci": "bash scripts/upload-wechat-miniapp.sh"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

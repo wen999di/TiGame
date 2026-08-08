@@ -76,3 +76,21 @@ pnpm dev:miniprogram:check
 - 麻将计分：给分、向所有人收取、确认/拒绝、重置准备、结账准备、结算建议
 
 网页版不要求头像，因此旧客户端、旧 API 调用和已有房间数据保持兼容。
+
+## 5. GitHub Actions 自动上传
+
+仓库提供 `.github/workflows/deploy-miniapp.yml`。启用后，`main` 分支的小程序源码、项目配置或上传脚本发生变化时，会自动使用微信官方 `miniprogram-ci@2.1.31` 上传开发版本；也可以在 GitHub Actions 页面手动运行。TiGame 当前只有一套小程序环境，不区分 development / production。
+
+需要在 GitHub Repository Settings -> Secrets and variables -> Actions 中配置：
+
+- Repository Variable `WECHAT_MINIAPP_APP_ID`：小程序 AppID，例如 `wx...`。AppID 不是敏感信息，因此使用 Variable。
+- Repository Secret `WECHAT_MINIAPP_UPLOAD_KEY`：微信公众平台生成的“小程序代码上传密钥”全文。它不是 App Secret，不要把 App Secret 填到这里。
+- Repository Variable `WECHAT_MINIAPP_CI_ROBOT`：可选，固定上传机器人编号 `1` 到 `30`，默认 `1`。
+- Repository Variable `WECHAT_MINIAPP_CI_RUNNER`：可选，默认 `ubuntu-latest`。如果代码上传密钥启用了 IP 白名单，应改为具有固定出口 IP 的 self-hosted runner label。
+- Repository Variable `WECHAT_MINIAPP_CI_ENABLED`：最后设置为 `1` 才真正启用自动上传；未设置时 job 会跳过，不会因为尚未拿到 AppID/上传密钥而让 `main` CI 失败。
+
+CI 会把上传密钥写入 Runner 临时目录并设置为仅当前用户可读，上传结束后无论成功失败都会删除。AppID 直接通过 `miniprogram-ci --appid` 传入，因此仓库中的 `project.config.json` 可以继续保持空 `appid`，本机调试仍可使用 `project.private.config.json`。
+
+上传版本号格式为 `0.<GitHub Run Number>.<Run Attempt>`，说明中包含 `main` 与短 commit SHA。第一次成功上传后，到微信公众平台把固定 robot 上传的开发版本设为“体验版”一次；以后 CI 持续使用同一个 robot 上传即可更新同一体验入口。每次 workflow 还会保存 `wechat-trial-entry` Artifact，并在 Job Summary 中写出固定体验入口 URL。
+
+启用顺序建议是：先配置 AppID、上传密钥和可选 robot/runner，确认上传密钥的 IP 白名单策略，再最后添加 `WECHAT_MINIAPP_CI_ENABLED=1`。小程序代码上传本身不需要微信 App Secret。
