@@ -1,0 +1,16 @@
+page {
+  min-height: 100%;
+  background: #0b1726;
+  color: #f5ebdd;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body, #app, .taro_page, .screen-motion {
+  min-height: 100vh;
+}
+
+/* Taro 小程序端使用原生扫码，不渲染 Web 摄像头层。 */
+.camera-overlay { display: none !important; }
+
+/* 小程序端不支持 SVG；发送按钮仍保留完整交互，省略纯装饰描边。 */
+.mahjong-send-trace { display: none !important; }

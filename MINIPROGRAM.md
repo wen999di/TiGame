@@ -1,97 +1,127 @@
-# TiGame 微信小程序
+# TiGame 微信小程序（Taro 4）
 
-`miniprogram/` 是原生微信小程序客户端，继续使用本仓库现有的 Cloudflare Worker / Durable Object 房间后端，因此网页版与小程序版可以进入同一个房间。
+TiGame 微信小程序现在使用 **Taro 4.2.1 + React**。旧的原生 `miniprogram/` 客户端已经删除；小程序入口只负责平台适配，主界面和游戏业务直接编译仓库现有的 `app/page.tsx`、`app/game/*` 等网页 React/TypeScript 源码。
 
-## 1. 后端与调试模式
+## 代码结构
 
-小程序正式/云端 API 固定为 `https://tigame.cavendish.dpdns.org`，源文件 `miniprogram/config.js` 保持该地址。WebSocket 会自动转换为 `wss://`。
-
-Windows 开发机提供两种调试模式：
-
-```bash
-pnpm dev:miniprogram:cloud
-pnpm dev:miniprogram:local
+```text
+app/                         网页端与小程序共同使用的 React/游戏源码
+  page.tsx                   大厅、房间、游戏主界面（共享）
+  game/                      游戏逻辑（共享）
+  platform/portal.ts         Web 端 Portal 实现
+miniapp/                     Taro 4 微信小程序壳层
+  config/index.ts            Taro 构建、共享源码 loader、平台别名
+  src/pages/index/index.tsx  小程序页面入口，直接 import app/page.tsx
+  src/platform.ts            request/WebSocket/扫码/存储等 Taro 适配
+  src/shims/                 少量 DOM/Motion 小程序适配
+project.config.json          微信开发者工具工程配置，指向 dist/miniapp/
+dist/miniapp/                Taro 生成物（忽略提交，不要直接编辑）
 ```
 
-- `dev:miniprogram:cloud`：直接打开仓库小程序工程，连接 `https://tigame.cavendish.dpdns.org`。`pnpm dev:miniprogram` 保留为它的兼容别名。
-- `dev:miniprogram:local`：自动启动或复用本地 `pnpm dev`（端口 `5173`），检测电脑私有局域网 IPv4，并生成 `.wechat-devtools/local/` 临时小程序工程，API 使用 `http://<电脑局域网IP>:5173`，WebSocket 使用对应的 `ws://`。生成工程会关闭合法域名校验，且 `miniprogram/` 源码变化会同步过去。`.wechat-devtools/local/` 仅用于调试，不应直接编辑；源码始终修改仓库中的 `miniprogram/`。
+`@tarojs/plugin-html` 负责将网页 React 中已有的 HTML JSX 标签映射到小程序运行时，所以不会再维护一套 WXML/WXSS/JS 游戏界面。Taro 4.2.1 的 React renderer 使用 React 18，因此 `miniapp/` workspace 固定 React 18.3.1；网页根工程继续使用 React 19，两者通过 workspace 隔离。
 
-如果只想构建/检查并持续 watch，不希望命令自动打开微信开发者工具，可使用：
+## 正式/云端构建
+
+正式小程序连接：
+
+- HTTP API：`https://tigame.cavendish.dpdns.org`
+- WebSocket：`wss://tigame.cavendish.dpdns.org`
+
+常用命令：
 
 ```bash
-pnpm build:miniprogram          # 云端源码：持续语法/工程校验，不打开 DevTools
-pnpm build:miniprogram:cloud    # 与上面等价的显式别名
-pnpm build:miniprogram:local    # 生成本地临时工程并持续同步，不打开 DevTools
+pnpm check:miniprogram          # TypeScript 检查 + 一次性 Taro weapp 构建，输出 dist/miniapp/
+pnpm build:miniprogram         # Taro watch，不自动打开微信开发者工具
+pnpm build:miniprogram:cloud   # 同上
+pnpm dev:miniprogram:cloud     # Taro watch + 自动打开微信开发者工具
+pnpm dev:miniprogram           # 上一条的兼容别名
+pnpm dev:miniprogram:check     # 构建后仅检查微信工程结构，容器内可运行
 ```
 
-TiGame 小程序是原生微信小程序，没有 Taro/webpack 的额外 dist 编译阶段；云端源码本身就是可直接被微信开发者工具读取的构建产物。因此 `build:miniprogram` 的职责是先完整校验工程和 JavaScript，再监听 `miniprogram/` 与 `project.config.json` 的变化并重复校验。`build:miniprogram:local` 则复用 local 调试器的生成/同步逻辑，只关闭自动打开 DevTools 的步骤。
-
-本地模式不会修改仓库中的云端 `miniprogram/config.js`，因此不会出现调试结束后忘记切回正式 API 的问题。真机本地调试时手机和电脑必须处于同一 LAN/Wi-Fi；若自动选择网卡不正确，可执行 `pnpm dev:miniprogram:local -- --ip 192.168.x.x`。Windows 防火墙需要允许 Node/Vite 的 TCP 5173 入站。
+`build:miniprogram` 会保留 Taro 自身的编译进度和错误输出，并持续 watch `miniapp/` 与共享的 `app/` 源码。
 
 微信公众平台正式环境仍需配置：
 
 - **request 合法域名**：`https://tigame.cavendish.dpdns.org`
 - **socket 合法域名**：`wss://tigame.cavendish.dpdns.org`
 
-## 2. 打开微信开发者工具与 AppID
+## 本地 Worker 联调
 
-两种 GUI 调试命令都只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，并通过官方 V2 `open --project` 命令直接进入对应项目开发页面；不自动搜索、不交互询问，也不保存本机路径配置。变量未设置、文件不存在或不是 `cli.bat` 时直接报错。
+Windows 开发机可运行：
 
-PowerShell 当前会话示例：
+```bash
+pnpm dev:miniprogram:local
+```
+
+脚本会：
+
+1. 启动或复用本地 `pnpm dev`（5173）；
+2. 自动选择可从局域网访问的私有 IPv4；
+3. 用 `TIGAME_MINIAPP_API_BASE=http://<电脑IP>:5173` 启动同一个 Taro 工程；
+4. 把临时产物写入 `.wechat-devtools/local/miniprogram/`；
+5. 生成关闭 URL 校验的 `.wechat-devtools/local/project.config.json`；
+6. 打开微信开发者工具并持续 Taro watch。
+
+只构建/watch、不自动打开 DevTools：
+
+```bash
+pnpm build:miniprogram:local
+```
+
+指定网卡：
+
+```bash
+pnpm dev:miniprogram:local -- --ip 192.168.x.x
+```
+
+在 Linux/Docker 中验证本地工程生成逻辑：
+
+```bash
+pnpm dev:miniprogram:local -- --check
+```
+
+`.wechat-devtools/` 和 `dist/` 都是生成目录，不要直接修改。真机访问本地 Worker 时，手机和电脑需在同一 LAN/Wi-Fi，并确保 Windows 防火墙允许 5173 入站。
+
+## 微信开发者工具
+
+GUI 命令只读取环境变量 `WECHAT_DEVTOOLS_CLI_PATH`，它必须指向微信开发者工具的 `cli.bat`。
+
+PowerShell 示例：
 
 ```powershell
 $env:WECHAT_DEVTOOLS_CLI_PATH = 'D:\Tencent\微信web开发者工具\cli.bat'
 pnpm dev:miniprogram:cloud
-# 或
-pnpm dev:miniprogram:local
 ```
 
-如需持久保存到当前 Windows 用户环境变量，可使用 `setx WECHAT_DEVTOOLS_CLI_PATH "实际的 cli.bat 完整路径"`，然后重新打开终端。
+Linux Docker 无法直接启动 Windows GUI，可使用 `pnpm dev:miniprogram:check`。仓库 `project.config.json` 已配置 AppID `wx3401664ce3ed7449`；本机 `project.private.config.json` 如存在 AppID，会被微信开发者工具优先采用。
 
-Linux Docker 容器不能直接启动 Windows GUI，可执行：
+## 平台适配边界
 
-```bash
-pnpm dev:miniprogram:check
-pnpm dev:miniprogram:local -- --check
-```
+共享页面中的房间和游戏状态机仍只有一份。小程序层仅处理 Web 与微信运行时不同的能力：
 
-前者检查正式源码工程；后者额外生成并检查本地调试临时工程。仓库 `project.config.json` 已配置正式 AppID `wx3401664ce3ed7449`。
+- `fetch` → `Taro.request`
+- `WebSocket` → `Taro.connectSocket` / `SocketTask`
+- `localStorage` → 微信同步 Storage
+- 扫码 → `Taro.scanCode`
+- 剪贴板、振动、网络状态 → 对应 Taro API
+- Web Portal / Motion / SVG 辅助动画 → 小程序安全降级，不复制业务逻辑
+- 房间邀请 → 微信右上角分享，分享路径携带 `invite` 参数
 
-`project.private.config.json` 仍被 `.gitignore` 忽略，可在确有需要时作为本机覆盖；若其中残留其他 AppID，微信开发者工具会优先采用它，建议删除旧 `appid`。
+因此新增游戏、规则或绝大多数 UI 调整应优先修改 `app/`；只有涉及微信专属能力时才修改 `miniapp/src/`。
 
-## 3. 微信头像与昵称
+## GitHub Actions 自动上传
 
-新版本小程序不再通过 `wx.getUserProfile` 静默获取真实昵称头像。客户端采用微信当前提供的头像昵称填写能力：
+`.github/workflows/deploy-miniapp.yml` 会在共享 React、小程序适配层、Taro 配置或项目配置变化时执行：
 
-- 头像：`button open-type="chooseAvatar"`
-- 昵称：`input type="nickname"`
+1. `pnpm install --frozen-lockfile`
+2. `pnpm run check:miniprogram` 生成 `dist/miniapp/`
+3. `miniprogram-ci@2.1.31` 按根 `project.config.json` 的 `miniprogramRoot` 上传
 
-头像在客户端缩小后才随创建/加入请求进入房间，并由服务端再次限制为最多 4096 字符的图片 data URL，防止用户把超大内容写进 Durable Object 房间快照。用户不选择头像时仍可使用昵称首字作为头像。
+需要配置：
 
-## 4. 已覆盖功能
+- Secret `WECHAT_MINIAPP_UPLOAD_KEY`：微信公众平台“小程序代码上传密钥”全文；
+- Variable `WECHAT_MINIAPP_CI_ROBOT`：可选，1–30，默认 1；
+- Variable `WECHAT_MINIAPP_CI_RUNNER`：可选，默认 `ubuntu-latest`；
+- Variable `WECHAT_MINIAPP_CI_ENABLED=1`：启用自动上传。
 
-- 创建房间 / 输入房间码加入 / 小程序分享邀请
-- 房主审核加入、拒绝、踢人、离开/结束房间
-- 单次 WebSocket ticket、断线指数退避重连、原有 command/ack 协议
-- 谁是卧底：设置、发牌、准备投票、投票、揭晓、下一局
-- 不要做挑战：生命设置、开始、惩罚、换牌、奖励、弃牌提示、重开
-- 麻将计分：给分、向所有人收取、确认/拒绝、重置准备、结账准备、结算建议
-
-网页版不要求头像，因此旧客户端、旧 API 调用和已有房间数据保持兼容。
-
-## 5. GitHub Actions 自动上传
-
-仓库提供 `.github/workflows/deploy-miniapp.yml`。启用后，`main` 分支的小程序源码、项目配置或上传脚本发生变化时，会自动使用微信官方 `miniprogram-ci@2.1.31` 上传开发版本；也可以在 GitHub Actions 页面手动运行。TiGame 当前只有一套小程序环境，不区分 development / production。
-
-需要在 GitHub Repository Settings -> Secrets and variables -> Actions 中配置：
-
-- Repository Secret `WECHAT_MINIAPP_UPLOAD_KEY`：微信公众平台生成的“小程序代码上传密钥”全文。它不是 App Secret，不要把 App Secret 填到这里。AppID 直接读取仓库中的 `project.config.json`，不需要额外配置 GitHub Variable。
-- Repository Variable `WECHAT_MINIAPP_CI_ROBOT`：可选，固定上传机器人编号 `1` 到 `30`，默认 `1`。
-- Repository Variable `WECHAT_MINIAPP_CI_RUNNER`：可选，默认 `ubuntu-latest`。如果代码上传密钥启用了 IP 白名单，应改为具有固定出口 IP 的 self-hosted runner label。
-- Repository Variable `WECHAT_MINIAPP_CI_ENABLED`：最后设置为 `1` 才真正启用自动上传；未设置时 job 会跳过，不会因为尚未拿到 AppID/上传密钥而让 `main` CI 失败。
-
-CI 会把上传密钥写入 Runner 临时目录并设置为仅当前用户可读，上传结束后无论成功失败都会删除。Workflow 会从仓库 `project.config.json` 读取 AppID，再通过 `miniprogram-ci --appid` 显式传入，确保本机调试和 CI 使用同一个小程序身份。
-
-上传版本号格式为 `0.<GitHub Run Number>.<Run Attempt>`，说明中包含 `main` 与短 commit SHA。第一次成功上传后，到微信公众平台把固定 robot 上传的开发版本设为“体验版”一次；以后 CI 持续使用同一个 robot 上传即可更新同一体验入口。每次 workflow 还会保存 `wechat-trial-entry` Artifact，并在 Job Summary 中写出固定体验入口 URL。
-
-启用顺序建议是：先在 GitHub 配置上传密钥和可选 robot/runner，确认上传密钥的 IP 白名单策略，再最后添加 `WECHAT_MINIAPP_CI_ENABLED=1`。小程序代码上传本身不需要微信 App Secret。
+版本号仍为 `0.<GitHub Run Number>.<Run Attempt>`。上传密钥只写入 Runner 临时目录并在任务结束时删除。

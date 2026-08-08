@@ -1,0 +1,39 @@
+{
+  "name": "@tigame/miniapp",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check:weapp": "tsc --noEmit -p tsconfig.json && taro build --type weapp"
+  },
+  "dependencies": {
+    "@tarojs/components": "4.2.1",
+    "@tarojs/helper": "4.2.1",
+    "@tarojs/plugin-framework-react": "4.2.1",
+    "@tarojs/react": "4.2.1",
+    "@tarojs/runtime": "4.2.1",
+    "@tarojs/shared": "4.2.1",
+    "@tarojs/taro": "4.2.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/plugin-transform-class-properties": "7.25.9",
+    "@babel/preset-react": "^7.29.7",
+    "@tarojs/cli": "4.2.1",
+    "@tarojs/plugin-html": "4.2.1",
+    "@tarojs/plugin-platform-weapp": "4.2.1",
+    "@tarojs/taro-loader": "4.2.1",
+    "@tarojs/webpack5-runner": "4.2.1",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "babel-loader": "8.2.1",
+    "babel-preset-taro": "4.2.1",
+    "tsconfig-paths-webpack-plugin": "^4.2.0",
+    "typescript": "5.9.3",
+    "webpack": "5.91.0"
+  }
+}

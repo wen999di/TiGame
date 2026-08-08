@@ -1,0 +1,4 @@
+{
+  "desc": "TiGame Taro 4 miniapp",
+  "rules": [{ "action": "allow", "page": "*" }]
+}

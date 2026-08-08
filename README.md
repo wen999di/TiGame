@@ -9,9 +9,10 @@
 ## 项目结构
 
 ```
-app/                   前端页面与客户端逻辑
-  page.tsx             主界面（大厅与各游戏页面）
+app/                   网页端与微信小程序共享的 React 页面/游戏逻辑
+  page.tsx             主界面（大厅与各游戏页面，共享源码）
   game/                各小游戏的纯逻辑模块
+miniapp/               Taro 4 微信小程序壳层与平台适配
 worker/                服务端（Cloudflare Worker）
   game-room.ts         房间状态管理（Durable Object）
   index.ts             WebSocket 接入
@@ -62,7 +63,9 @@ pnpm dev
 | `pnpm dev:miniprogram` | 小程序云端调试（兼容别名，同 `dev:miniprogram:cloud`） |
 | `pnpm dev:miniprogram:cloud` | 打开微信开发者工具，小程序连接正式 Cloudflare API |
 | `pnpm dev:miniprogram:local` | 自动启动/复用本地 `pnpm dev`，小程序通过局域网连接本地 API/WebSocket |
-| `pnpm dev:miniprogram:check` | 仅检查小程序工程结构（容器内可运行） |
+| `pnpm build:miniprogram` | Taro 4 持续构建/watch，不自动打开微信开发者工具 |
+| `pnpm check:miniprogram` | 一次性构建 Taro 微信小程序到 `dist/miniapp/` |
+| `pnpm dev:miniprogram:check` | 构建后检查小程序工程结构（容器内可运行） |
 | `pnpm deploy:miniprogram:ci` | 使用微信官方 miniprogram-ci 上传小程序（主要供 GitHub Actions 使用） |
 
 ### 调试提示
@@ -110,5 +113,5 @@ pnpm dev
 
 ## 微信小程序
 
-仓库内已包含原生微信小程序客户端 `miniprogram/`，与网页版复用同一套 Cloudflare Worker / Durable Object 房间后端。
-配置、合法域名以及头像昵称能力说明见 [`MINIPROGRAM.md`](./MINIPROGRAM.md)。
+微信小程序使用 **Taro 4**，页面入口直接复用网页端的 `app/page.tsx` 与 `app/game/*` React/TypeScript 源码；旧原生 `miniprogram/` 客户端已删除。Taro 产物输出到 `dist/miniapp/`，并继续复用同一套 Cloudflare Worker / Durable Object 房间后端。
+构建、开发者工具、本地 Worker 联调和 CI 上传说明见 [`MINIPROGRAM.md`](./MINIPROGRAM.md)。

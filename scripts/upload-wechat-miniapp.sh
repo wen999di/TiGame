@@ -29,8 +29,11 @@ if [ ! -f "$project_path/project.config.json" ]; then
   echo "Missing project.config.json in Mini Program project path: $project_path" >&2
   exit 2
 fi
-if [ ! -f "$project_path/miniprogram/app.json" ]; then
-  echo "Missing miniprogram/app.json in Mini Program project path: $project_path" >&2
+miniprogram_root=$(node -e 'const fs=require("fs"); const p=process.argv[1]; const c=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(c.miniprogramRoot || "miniprogram/")' "$project_path/project.config.json")
+miniprogram_root=${miniprogram_root%/}
+if [ ! -f "$project_path/$miniprogram_root/app.json" ]; then
+  echo "Missing $miniprogram_root/app.json in Mini Program project path: $project_path" >&2
+  echo "Run pnpm run check:miniprogram before upload." >&2
   exit 2
 fi
 

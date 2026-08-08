@@ -1,9 +1,0 @@
-{
-  "desc": "TiGame",
-  "rules": [
-    {
-      "action": "allow",
-      "page": "*"
-    }
-  ]
-}

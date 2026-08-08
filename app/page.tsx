@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
+import { createPortal } from "@tigame/portal";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
@@ -11,8 +11,8 @@ import { type SecretCard, type UndercoverPublicState, type UndercoverSettings } 
 import { type WordBankScope } from "./game/deal-cards";
 import { type ChallengePublicState, type ChallengeSettings } from "./game/challenge";
 import { type MahjongPublicState } from "./game/mahjong";
-import { MahjongHistory } from "./ui/MahjongHistory";
-import { MahjongSendTrace } from "./components/MahjongSendTrace";
+import { MahjongHistory } from "@tigame/mahjong-history";
+import { MahjongSendTrace } from "@tigame/mahjong-send-trace";
 import { FlipText } from "./components/FlipText";
 
 type Screen = "home" | "create" | "join" | "lobby" | "game";
@@ -29,6 +29,20 @@ type StoredSession = {
 };
 
 type PrivateCard = SecretCard | { action: string };
+
+type TiGamePlatformBridge = {
+  kind?: "weapp" | "web";
+  apiBase?: string;
+  webBase?: string;
+  getInviteCode?: () => string;
+  clearInviteCode?: () => void;
+  scanCode?: () => Promise<string>;
+  setShareRoomId?: (roomId: string) => void;
+};
+
+function getPlatformBridge(): TiGamePlatformBridge | undefined {
+  return (globalThis as typeof globalThis & { __TIGAME_PLATFORM__?: TiGamePlatformBridge }).__TIGAME_PLATFORM__;
+}
 
 // 确认加入时，从申请列表“飞向”玩家列表的头像。
 type JoinFlight = {
@@ -114,6 +128,8 @@ function makeRoomId() {
 }
 
 function makeInviteUrl(room: Room) {
+  const platformBase = getPlatformBridge()?.webBase?.replace(/\/$/, "");
+  if (platformBase) return `${platformBase}/?invite=${room.roomId}`;
   if (typeof window === "undefined") return `https://example.com/?invite=${room.roomId}`;
   const base = window.location.pathname.replace(/\/?$/, "/");
   return `${window.location.origin}${base}?invite=${room.roomId}`;
@@ -2073,7 +2089,10 @@ export default function Home() {
     }
     sessionRef.current = session;
     socketSessionRef.current = session;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const platformApiBase = getPlatformBridge()?.apiBase?.replace(/\/$/, "");
+    const protocol = platformApiBase
+      ? (platformApiBase.startsWith("https:") ? "wss:" : "ws:")
+      : (window.location.protocol === "https:" ? "wss:" : "ws:");
     setWsStatus("connecting");
 
     const scheduleRetry = (closedSession: StoredSession | null) => {
@@ -2127,7 +2146,10 @@ export default function Home() {
         scheduleRetry(session);
         return;
       }
-      const url = `${protocol}//${window.location.host}/api/ws?roomId=${encodeURIComponent(session.roomId)}&ticket=${encodeURIComponent(ticket)}`;
+      const socketBase = platformApiBase
+        ? platformApiBase.replace(/^https?:/, protocol)
+        : `${protocol}//${window.location.host}`;
+      const url = `${socketBase}/api/ws?roomId=${encodeURIComponent(session.roomId)}&ticket=${encodeURIComponent(ticket)}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
       ws.onopen = () => {
@@ -2259,9 +2281,13 @@ export default function Home() {
   useEffect(() => {
     // 分享链接格式为 /?invite={邀请码}：主页直接读取参数进入加入流程，
     // 随后用 replaceState 原地清掉地址栏参数，只留下根 URL。
-    const url = new URL(window.location.href);
-    const inviteCode = normalizeRoomId(url.searchParams.get("invite") ?? "");
-    if (url.searchParams.has("invite")) {
+    const bridge = getPlatformBridge();
+    const bridgeInvite = bridge?.getInviteCode?.() ?? "";
+    const url = bridgeInvite || bridge?.kind === "weapp" ? null : new URL(window.location.href);
+    const inviteCode = normalizeRoomId(bridgeInvite || url?.searchParams.get("invite") || "");
+    if (bridgeInvite) {
+      bridge?.clearInviteCode?.();
+    } else if (url?.searchParams.has("invite")) {
       url.searchParams.delete("invite");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
@@ -2715,11 +2741,15 @@ export default function Home() {
   }, [cameraOpen, cameraPhase, handleScanSuccess]);
 
   const inviteUrl = useMemo(() => (room ? makeInviteUrl(room) : ""), [room]);
+  useEffect(() => {
+    getPlatformBridge()?.setShareRoomId?.(room?.roomId ?? "");
+  }, [room?.roomId]);
   const currentPlayer = room?.players.find((player) => player.id === room.localPlayerId) ?? null;
   const connectedCount = room?.players.filter((player) => player.online).length ?? 0;
   const isHost = Boolean(room && room.localPlayerId && room.hostId === room.localPlayerId);
 
   useEffect(() => {
+    if (getPlatformBridge()?.kind === "weapp") return;
     if (screen !== "lobby" || !inviteUrl || !qrCanvas) return;
     QRCode.toCanvas(qrCanvas, inviteUrl, {
       width: 168,
@@ -3748,6 +3778,13 @@ export default function Home() {
   };
 
   const openScanner = () => {
+    const nativeScanner = getPlatformBridge()?.scanCode;
+    if (nativeScanner) {
+      void nativeScanner()
+        .then((value) => { if (value) handleScanSuccess(value); })
+        .catch(() => setNotice("未完成扫码，请重试或手动输入邀请码"));
+      return;
+    }
     setCameraSwitchVisible(false);
     setCameraPhase("loading");
     setCameraMessage("正在打开摄像头…");
@@ -4224,7 +4261,7 @@ export default function Home() {
         <aside className="lobby-side">
           <div className="glass-card invite-card">
             <div className="card-header"><div><span className="section-kicker">邀请玩家</span><h2>扫码加入</h2></div><span className="invite-symbol">⌗</span></div>
-            <div className="lobby-qr-wrap"><canvas ref={setQrCanvas} className="lobby-qr-canvas" aria-label="房间邀请二维码" /></div><p className="lobby-room-code">{room.roomId}</p>
+            <div className="lobby-qr-wrap">{getPlatformBridge()?.kind === "weapp" ? <div className="miniapp-share-hint">点击右上角分享房间</div> : <canvas ref={setQrCanvas} className="lobby-qr-canvas" aria-label="房间邀请二维码" />}</div><p className="lobby-room-code">{room.roomId}</p>
             <div className="invite-actions">{copyFailed ? <div className="manual-copy-block"><input className="manual-copy-input" readOnly value={inviteUrl} aria-label="房间邀请链接" onFocus={(event) => event.currentTarget.select()} onPointerUp={(event) => event.currentTarget.select()} /><p className="manual-copy-hint">自动复制失败：请长按或点选上方链接，复制后发给好友</p><button className="copy-link compact-link retry-copy" onClick={copyInvite}>重新自动复制</button></div> : <button className="copy-link compact-link" onClick={copyInvite}>{copied ? "✓ 已复制" : "复制邀请链接"}</button>}
               {(isHost && (room.pendingJoinRequests.length > 0 || leavingRequests.length > 0)) && <div className="join-request-list"><span>加入申请</span>{pendingAndLeavingRequests.pending.map((request, index) => renderJoinRequestRow(request, index, false))}{pendingAndLeavingRequests.leaving.map((item, index) => renderJoinRequestRow(item, index + pendingAndLeavingRequests.pending.length, true))}</div>}
             </div>

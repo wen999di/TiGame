@@ -1,6 +1,6 @@
 {
-  "description": "TiGame 微信小程序",
-  "miniprogramRoot": "miniprogram/",
+  "description": "TiGame Taro 4 微信小程序",
+  "miniprogramRoot": "dist/miniapp/",
   "compileType": "miniprogram",
   "setting": {
     "es6": true,
@@ -13,6 +13,6 @@
     "packNpmManually": false
   },
   "appid": "wx3401664ce3ed7449",
-  "projectname": "TiGame-WeChat",
+  "projectname": "TiGame-Taro-WeChat",
   "condition": {}
 }

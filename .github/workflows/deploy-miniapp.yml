@@ -5,9 +5,19 @@ on:
   push:
     branches: [main]
     paths:
-      - miniprogram/**
+      - miniapp/**
+      - app/page.tsx
+      - app/game/**
+      - app/components/**
+      - app/ui/**
+      - app/platform/**
+      - app/globals.css
       - project.config.json
       - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - scripts/dev-miniprogram*.mjs
+      - scripts/open-wechat-devtools.mjs
       - scripts/upload-wechat-miniapp.sh
       - .github/workflows/deploy-miniapp.yml
 
@@ -38,8 +48,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - name: Validate Mini Program source
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Taro Mini Program
         run: pnpm run check:miniprogram
 
       - name: Prepare WeChat Mini Program CI
