@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import "./platform";
-import "../../app/globals.css";
+import "../../app/shared.css";
 import "./miniapp.css";
 
 export default function App({ children }: PropsWithChildren) {
