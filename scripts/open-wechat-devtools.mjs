@@ -89,7 +89,7 @@ async function validateProject(projectRoot) {
 
 async function openDevTools(cliPath, projectRoot) {
   const comSpec = process.env.ComSpec || "cmd.exe";
-  const command = `call "${cliPath}" -o "${projectRoot}"`;
+  const command = `call "${cliPath}" open --project "${projectRoot}"`;
   const child = spawn(comSpec, ["/d", "/s", "/c", command], {
     cwd: projectRoot,
     stdio: "inherit",

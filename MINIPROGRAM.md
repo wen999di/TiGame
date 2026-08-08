@@ -25,7 +25,7 @@ pnpm dev:miniprogram:local
 
 ## 2. 打开微信开发者工具与 AppID
 
-两种 GUI 调试命令都只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，不自动搜索、不交互询问，也不保存本机路径配置。变量未设置、文件不存在或不是 `cli.bat` 时直接报错。
+两种 GUI 调试命令都只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，并通过官方 V2 `open --project` 命令直接进入对应项目开发页面；不自动搜索、不交互询问，也不保存本机路径配置。变量未设置、文件不存在或不是 `cli.bat` 时直接报错。
 
 PowerShell 当前会话示例：
 
