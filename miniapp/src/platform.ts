@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic BOM/Taro compatibility bridge */
 import Taro from "@tarojs/taro";
+import { document as taroDocument, navigator as taroNavigator, window as taroWindow } from "@tarojs/runtime";
 
 declare const __TIGAME_API_BASE__: string;
 
@@ -12,8 +13,12 @@ type FetchInit = {
 
 const apiBase = __TIGAME_API_BASE__.replace(/\/$/, "");
 const root = globalThis as unknown as Record<string, any>;
-const win = (root.window ?? root) as Record<string, any>;
-const nav = (root.navigator ?? (root.navigator = {})) as Record<string, any>;
+// Taro 将源码里的 window / document / navigator 重写为 @tarojs/runtime 的 BOM 对象。
+// 因此仅给 globalThis 打补丁并不能覆盖共享 Web 页面实际读取到的对象。
+const win = taroWindow as unknown as Record<string, any>;
+const globalWin = (root.window ?? root) as Record<string, any>;
+const nav = taroNavigator as unknown as Record<string, any>;
+const globalNav = (root.navigator ?? {}) as Record<string, any>;
 let shareRoomId = "";
 
 function absoluteUrl(input: string) {
@@ -151,23 +156,47 @@ root.__TIGAME_PLATFORM__ = {
 
 root.fetch = miniFetch;
 root.WebSocket = MiniWebSocket;
-win.localStorage = storage;
-win.isSecureContext = true;
-win.requestAnimationFrame ??= (callback: FrameRequestCallback) => win.setTimeout(() => callback(Date.now()), 16);
-win.cancelAnimationFrame ??= (id: number) => win.clearTimeout(id);
-win.scrollY ??= 0;
-win.innerHeight ??= 800;
-win.innerWidth ??= 375;
-win.scrollTo ??= () => {};
-win.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
-win.getComputedStyle ??= () => ({
-  transform: "none",
-  borderTopLeftRadius: "0px",
-  getPropertyValue: () => "",
-});
-nav.onLine = true;
-nav.clipboard = { writeText: (text: string) => Taro.setClipboardData({ data: text }).then(() => undefined) };
-nav.vibrate = () => { void Taro.vibrateShort({ type: "light" }); return true; };
+root.localStorage = storage;
+root.window ??= win;
+root.document ??= taroDocument;
+root.navigator ??= nav;
+
+function patchWindow(target: Record<string, any>) {
+  target.localStorage = storage;
+  target.isSecureContext = true;
+  target.requestAnimationFrame ??= (callback: FrameRequestCallback) => target.setTimeout(() => callback(Date.now()), 16);
+  target.cancelAnimationFrame ??= (id: number) => target.clearTimeout(id);
+  target.scrollY ??= 0;
+  target.innerHeight ??= 800;
+  target.innerWidth ??= 375;
+  target.scrollTo ??= () => {};
+  target.matchMedia ??= (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent() { return false; },
+  });
+  target.getComputedStyle ??= () => ({
+    transform: "none",
+    borderTopLeftRadius: "0px",
+    getPropertyValue: () => "",
+  });
+}
+
+function patchNavigator(target: Record<string, any>) {
+  target.onLine = true;
+  target.clipboard ??= { writeText: (text: string) => Taro.setClipboardData({ data: text }).then(() => undefined) };
+  target.vibrate ??= () => { void Taro.vibrateShort({ type: "light" }); return true; };
+}
+
+patchWindow(win);
+if (globalWin !== win) patchWindow(globalWin);
+patchNavigator(nav);
+if (globalNav !== nav) patchNavigator(globalNav);
 
 class NoopObserver {
   constructor(_callback?: (...args: any[]) => void) {}
