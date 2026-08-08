@@ -83,6 +83,7 @@ async function openDevTools(cliPath) {
     cwd: REPO_ROOT,
     stdio: "inherit",
     windowsHide: false,
+    windowsVerbatimArguments: true,
   });
   const code = await new Promise((resolve, reject) => {
     child.once("error", reject);
