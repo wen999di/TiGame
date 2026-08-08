@@ -93,7 +93,7 @@ $env:WECHAT_DEVTOOLS_CLI_PATH = 'D:\Tencent\微信web开发者工具\cli.bat'
 pnpm dev:miniprogram:cloud
 ```
 
-Linux Docker 无法直接启动 Windows GUI，可使用 `pnpm dev:miniprogram:check`。仓库 `project.config.json` 已配置 AppID `wx3401664ce3ed7449`；本机 `project.private.config.json` 如存在 AppID，会被微信开发者工具优先采用。
+Linux Docker 无法直接启动 Windows GUI，可使用 `pnpm dev:miniprogram:check`。仓库 `project.config.json` 已配置 AppID `wx0f1f5b78c7a6c7cc`；本机 `project.private.config.json` 如存在 AppID，会被微信开发者工具优先采用。
 
 ## 平台适配边界
 
