@@ -59,7 +59,9 @@ pnpm dev
 | `pnpm lint` | ESLint 代码检查 |
 | `pnpm build` | 构建生产产物（同 `build:cloudflare`） |
 | `pnpm deploy:cloudflare` | 构建并部署到 Cloudflare |
-| `pnpm dev:miniprogram` | Windows 上通过 `WECHAT_DEVTOOLS_CLI_PATH` 指定的 CLI 打开微信开发者工具并载入本项目 |
+| `pnpm dev:miniprogram` | 小程序云端调试（兼容别名，同 `dev:miniprogram:cloud`） |
+| `pnpm dev:miniprogram:cloud` | 打开微信开发者工具，小程序连接正式 Cloudflare API |
+| `pnpm dev:miniprogram:local` | 自动启动/复用本地 `pnpm dev`，小程序通过局域网连接本地 API/WebSocket |
 | `pnpm dev:miniprogram:check` | 仅检查小程序工程结构（容器内可运行） |
 | `pnpm deploy:miniprogram:ci` | 使用微信官方 miniprogram-ci 上传小程序（主要供 GitHub Actions 使用） |
 

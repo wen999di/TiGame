@@ -2,52 +2,52 @@
 
 `miniprogram/` 是原生微信小程序客户端，继续使用本仓库现有的 Cloudflare Worker / Durable Object 房间后端，因此网页版与小程序版可以进入同一个房间。
 
-## 1. 配置后端地址
+## 1. 后端与调试模式
 
-编辑 `miniprogram/config.js`：
+小程序正式/云端 API 固定为 `https://tigame.cavendish.dpdns.org`，源文件 `miniprogram/config.js` 保持该地址。WebSocket 会自动转换为 `wss://`。
 
-```js
-module.exports = {
-  API_BASE: 'https://tigame.cavendish.dpdns.org',
-};
+Windows 开发机提供两种调试模式：
+
+```bash
+pnpm dev:miniprogram:cloud
+pnpm dev:miniprogram:local
 ```
 
-生产/真机环境必须是 HTTPS。小程序 WebSocket 会自动把该地址转换为 WSS。
+- `dev:miniprogram:cloud`：直接打开仓库小程序工程，连接 `https://tigame.cavendish.dpdns.org`。`pnpm dev:miniprogram` 保留为它的兼容别名。
+- `dev:miniprogram:local`：自动启动或复用本地 `pnpm dev`（端口 `5173`），检测电脑私有局域网 IPv4，并生成 `.wechat-devtools/local/` 临时小程序工程，API 使用 `http://<电脑局域网IP>:5173`，WebSocket 使用对应的 `ws://`。生成工程会关闭合法域名校验，且 `miniprogram/` 源码变化会同步过去。`.wechat-devtools/local/` 仅用于调试，不应直接编辑；源码始终修改仓库中的 `miniprogram/`。
 
-在微信公众平台把同一个域名加入：
+本地模式不会修改仓库中的云端 `miniprogram/config.js`，因此不会出现调试结束后忘记切回正式 API 的问题。真机本地调试时手机和电脑必须处于同一 LAN/Wi-Fi；若自动选择网卡不正确，可执行 `pnpm dev:miniprogram:local -- --ip 192.168.x.x`。Windows 防火墙需要允许 Node/Vite 的 TCP 5173 入站。
+
+微信公众平台正式环境仍需配置：
 
 - **request 合法域名**：`https://tigame.cavendish.dpdns.org`
 - **socket 合法域名**：`wss://tigame.cavendish.dpdns.org`
 
-开发者工具本机调试时可以临时关闭“校验合法域名”，但真机预览/正式版不能依赖这个开关。
-
 ## 2. 打开微信开发者工具与 AppID
 
-在 Windows 开发机上执行：
+两种 GUI 调试命令都只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，不自动搜索、不交互询问，也不保存本机路径配置。变量未设置、文件不存在或不是 `cli.bat` 时直接报错。
 
-```bash
-pnpm dev:miniprogram
-```
-脚本只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，不再自动搜索、交互询问或写入本机配置文件。变量未设置、文件不存在或不是 `cli.bat` 时会直接报错。它会通过官方 CLI 的 `-o <项目目录>` 打开仓库根目录。
-
-PowerShell 当前会话可这样设置：
+PowerShell 当前会话示例：
 
 ```powershell
-$env:WECHAT_DEVTOOLS_CLI_PATH = 'C:\Program Files\Tencent\微信开发者工具\cli.bat'
-pnpm dev:miniprogram
+$env:WECHAT_DEVTOOLS_CLI_PATH = 'D:\Tencent\微信web开发者工具\cli.bat'
+pnpm dev:miniprogram:cloud
+# 或
+pnpm dev:miniprogram:local
 ```
 
 如需持久保存到当前 Windows 用户环境变量，可使用 `setx WECHAT_DEVTOOLS_CLI_PATH "实际的 cli.bat 完整路径"`，然后重新打开终端。
 
-在 Linux Docker 容器内无法直接启动 Windows 宿主机 GUI，可以先执行：
+Linux Docker 容器不能直接启动 Windows GUI，可执行：
 
 ```bash
 pnpm dev:miniprogram:check
+pnpm dev:miniprogram:local -- --check
 ```
 
-仓库中的 `project.config.json` 已配置正式 AppID `wx3401664ce3ed7449`，因此 Windows 上执行 `pnpm dev:miniprogram` 时可以直接通过 CLI 打开 TiGame 小程序工程。`pnpm dev:miniprogram:check` 仍可用于不启动 GUI 的工程结构、WXML/WXSS/JS 静态检查。
+前者检查正式源码工程；后者额外生成并检查本地调试临时工程。仓库 `project.config.json` 已配置正式 AppID `wx3401664ce3ed7449`。
 
-`project.private.config.json` 仍被 `.gitignore` 忽略，可在确有需要时作为本机临时覆盖配置；正常开发不需要再单独设置 AppID。若本机以前创建过包含其他 AppID 的私有配置，应删除其中的 `appid` 或删除该文件，避免微信开发者工具优先采用旧 AppID。
+`project.private.config.json` 仍被 `.gitignore` 忽略，可在确有需要时作为本机覆盖；若其中残留其他 AppID，微信开发者工具会优先采用它，建议删除旧 `appid`。
 
 ## 3. 微信头像与昵称
 

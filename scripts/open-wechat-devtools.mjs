@@ -8,23 +8,24 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
-const PROJECT_CONFIG = path.join(REPO_ROOT, "project.config.json");
-const PRIVATE_PROJECT_CONFIG = path.join(REPO_ROOT, "project.private.config.json");
-const MINIAPP_ROOT = path.join(REPO_ROOT, "miniprogram");
-const APP_CONFIG = path.join(MINIAPP_ROOT, "app.json");
 const CLI_ENV_NAME = "WECHAT_DEVTOOLS_CLI_PATH";
 
 function printHelp() {
-  console.log(`Usage: pnpm dev:miniprogram [options]\n\nOptions:\n  --check   Validate the Mini Program project without opening DevTools\n  --help    Show this help\n\nWindows launch requires the ${CLI_ENV_NAME} environment variable to point to WeChat DevTools cli.bat.`);
+  console.log(`Usage: pnpm dev:miniprogram [options]\n\nOptions:\n  --check              Validate the Mini Program project without opening DevTools\n  --project <path>     Open a generated Mini Program project instead of the repository root\n  --help               Show this help\n\nWindows launch requires the ${CLI_ENV_NAME} environment variable to point to WeChat DevTools cli.bat.`);
 }
 
 function parseArgs(argv) {
-  const options = { check: false, help: false };
-  for (const arg of argv) {
+  const options = { check: false, help: false, projectRoot: REPO_ROOT };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (arg === "--") continue;
     if (arg === "--help" || arg === "-h") options.help = true;
     else if (arg === "--check") options.check = true;
-    else throw new Error(`Unknown option: ${arg}`);
+    else if (arg === "--project") {
+      const value = argv[++index] || "";
+      if (!value) throw new Error("--project requires a project directory.");
+      options.projectRoot = path.resolve(value);
+    } else throw new Error(`Unknown option: ${arg}`);
   }
   return options;
 }
@@ -56,24 +57,25 @@ async function resolveCliPathFromEnv() {
   return cliPath;
 }
 
-async function validateProject() {
-  if (!(await exists(PROJECT_CONFIG))) throw new Error(`Missing ${PROJECT_CONFIG}`);
-  if (!(await exists(APP_CONFIG))) throw new Error(`Missing ${APP_CONFIG}`);
+async function validateProject(projectRoot) {
+  const projectConfig = path.join(projectRoot, "project.config.json");
+  const privateProjectConfig = path.join(projectRoot, "project.private.config.json");
+  if (!(await exists(projectConfig))) throw new Error(`Missing ${projectConfig}`);
 
-  const config = JSON.parse(await readFile(PROJECT_CONFIG, "utf8"));
-  const privateConfig = (await exists(PRIVATE_PROJECT_CONFIG))
-    ? JSON.parse(await readFile(PRIVATE_PROJECT_CONFIG, "utf8"))
+  const config = JSON.parse(await readFile(projectConfig, "utf8"));
+  const root = config.miniprogramRoot || "miniprogram/";
+  const miniappRoot = path.resolve(projectRoot, root);
+  const appConfig = path.join(miniappRoot, "app.json");
+  if (!(await exists(appConfig))) throw new Error(`Missing ${appConfig}`);
+
+  const privateConfig = (await exists(privateProjectConfig))
+    ? JSON.parse(await readFile(privateProjectConfig, "utf8"))
     : {};
   if (config.compileType !== "miniprogram") {
     throw new Error("project.config.json compileType must be miniprogram.");
   }
   if (typeof config.projectname !== "string" || !config.projectname.trim()) {
     throw new Error("project.config.json projectname is required by WeChat DevTools CLI.");
-  }
-
-  const root = config.miniprogramRoot || "miniprogram/";
-  if (path.resolve(REPO_ROOT, root) !== MINIAPP_ROOT) {
-    throw new Error(`Unexpected miniprogramRoot: ${root}`);
   }
 
   const privateAppId = typeof privateConfig.appid === "string" ? privateConfig.appid.trim() : "";
@@ -85,11 +87,11 @@ async function validateProject() {
   };
 }
 
-async function openDevTools(cliPath) {
+async function openDevTools(cliPath, projectRoot) {
   const comSpec = process.env.ComSpec || "cmd.exe";
-  const command = `call "${cliPath}" -o "${REPO_ROOT}"`;
+  const command = `call "${cliPath}" -o "${projectRoot}"`;
   const child = spawn(comSpec, ["/d", "/s", "/c", command], {
-    cwd: REPO_ROOT,
+    cwd: projectRoot,
     stdio: "inherit",
     windowsHide: false,
     windowsVerbatimArguments: true,
@@ -110,8 +112,9 @@ async function main() {
     return;
   }
 
-  const project = await validateProject();
-  console.log(`Mini Program project: ${REPO_ROOT}`);
+  const projectRoot = options.projectRoot;
+  const project = await validateProject(projectRoot);
+  console.log(`Mini Program project: ${projectRoot}`);
   console.log(`Project name: ${project.projectName}`);
   if (project.appId) console.log(`AppID: ${project.appId} (${project.appIdSource})`);
   else {
@@ -143,7 +146,7 @@ async function main() {
   const cliPath = await resolveCliPathFromEnv();
   console.log(`WeChat DevTools CLI: ${cliPath}`);
   console.log("Opening WeChat DevTools...");
-  await openDevTools(cliPath);
+  await openDevTools(cliPath, projectRoot);
   console.log("WeChat DevTools project opened.");
 }
 

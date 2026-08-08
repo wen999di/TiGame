@@ -5,10 +5,22 @@ function normalizedBase() {
   return String(API_BASE || '').replace(/\/+$/, '');
 }
 
+function isPrivateHttpBase(base) {
+  const match = /^http:\/\/([^/:]+)(?::\d+)?$/i.exec(base);
+  if (!match) return false;
+  const host = match[1].toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  const parts = host.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  if (parts[0] === 10) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
+}
+
 function assertConfigured() {
   const base = normalizedBase();
-  if (!/^https:\/\//i.test(base) || /YOUR-SUBDOMAIN/i.test(base)) {
-    throw new Error('请先在 miniprogram/config.js 配置 TiGame 的 HTTPS Worker 地址');
+  if (/YOUR-SUBDOMAIN/i.test(base) || (!/^https:\/\//i.test(base) && !isPrivateHttpBase(base))) {
+    throw new Error('TiGame API 必须使用 HTTPS，或本地调试使用 localhost/私有局域网 HTTP 地址');
   }
   return base;
 }
@@ -49,7 +61,7 @@ async function getWsTicket(session) {
 }
 
 function wsUrl(roomId, ticket) {
-  const base = assertConfigured().replace(/^https:/i, 'wss:');
+  const base = assertConfigured().replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
   return `${base}/api/ws?roomId=${encodeURIComponent(roomId)}&ticket=${encodeURIComponent(ticket)}`;
 }
 
