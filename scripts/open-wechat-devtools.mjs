@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const PROJECT_CONFIG = path.join(REPO_ROOT, "project.config.json");
+const PRIVATE_PROJECT_CONFIG = path.join(REPO_ROOT, "project.private.config.json");
 const MINIAPP_ROOT = path.join(REPO_ROOT, "miniprogram");
 const APP_CONFIG = path.join(MINIAPP_ROOT, "app.json");
 const CLI_ENV_NAME = "WECHAT_DEVTOOLS_CLI_PATH";
@@ -60,6 +61,9 @@ async function validateProject() {
   if (!(await exists(APP_CONFIG))) throw new Error(`Missing ${APP_CONFIG}`);
 
   const config = JSON.parse(await readFile(PROJECT_CONFIG, "utf8"));
+  const privateConfig = (await exists(PRIVATE_PROJECT_CONFIG))
+    ? JSON.parse(await readFile(PRIVATE_PROJECT_CONFIG, "utf8"))
+    : {};
   if (config.compileType !== "miniprogram") {
     throw new Error("project.config.json compileType must be miniprogram.");
   }
@@ -72,8 +76,13 @@ async function validateProject() {
     throw new Error(`Unexpected miniprogramRoot: ${root}`);
   }
 
-  const appId = typeof config.appid === "string" ? config.appid.trim() : "";
-  return { appId, projectName: config.projectname };
+  const privateAppId = typeof privateConfig.appid === "string" ? privateConfig.appid.trim() : "";
+  const publicAppId = typeof config.appid === "string" ? config.appid.trim() : "";
+  return {
+    appId: privateAppId || publicAppId,
+    appIdSource: privateAppId ? "project.private.config.json" : "project.config.json",
+    projectName: config.projectname,
+  };
 }
 
 async function openDevTools(cliPath) {
@@ -104,7 +113,7 @@ async function main() {
   const project = await validateProject();
   console.log(`Mini Program project: ${REPO_ROOT}`);
   console.log(`Project name: ${project.projectName}`);
-  if (project.appId) console.log(`AppID: ${project.appId}`);
+  if (project.appId) console.log(`AppID: ${project.appId} (${project.appIdSource})`);
   else {
     console.warn(
       "AppID: <empty> — basic local editing can be prepared, but preview/real-device and some APIs require a test or real AppID.",
@@ -114,6 +123,14 @@ async function main() {
   if (options.check) {
     console.log("Project structure check passed.");
     return;
+  }
+
+  if (!project.appId) {
+    throw new Error(
+      "No AppID is configured in project.private.config.json or project.config.json. " +
+      "WeChat DevTools CLI requires an AppID to open a specific project. Use a test or real AppID for GUI debugging, " +
+      "or run pnpm dev:miniprogram:check for static validation.",
+    );
   }
 
   if (process.platform !== "win32") {

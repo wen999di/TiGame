@@ -45,7 +45,17 @@ pnpm dev:miniprogram
 pnpm dev:miniprogram:check
 ```
 
-当前 `project.config.json` 的 `appid` 保持为空，不会借用其他项目的 AppID。没有正式 AppID 时可以先做工程结构、WXML/WXSS/JS 等静态检查。微信开发者工具的项目导入、预览、真机以及依赖帐号身份的能力，建议先申请微信提供的测试号，之后再替换为正式 AppID。
+仓库中的 `project.config.json` 暂时保持空 `appid`，不会借用其他项目的 AppID。没有 AppID 时可先用 `pnpm dev:miniprogram:check` 做工程结构、WXML/WXSS/JS 等静态检查。微信开发者工具 CLI 的 `-o <项目目录>` 要求项目已有 AppID，因此完全没有 AppID 时 `pnpm dev:miniprogram` 会直接报错，避免只打开开发者工具首页却误报“项目已打开”。
+
+拿到测试号后，推荐在本机根目录创建已被 `.gitignore` 忽略的 `project.private.config.json`，只保存本机测试 AppID，例如：
+
+```json
+{
+  "appid": "wx你的测试号AppID"
+}
+```
+
+开发者工具会优先采用私有配置中的 AppID，`pnpm dev:miniprogram` 也会按相同优先级检查；正式 AppID 下来后再决定是否写入公共的 `project.config.json`。
 
 ## 3. 微信头像与昵称
 
