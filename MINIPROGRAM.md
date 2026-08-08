@@ -28,7 +28,16 @@ module.exports = {
 ```bash
 pnpm dev:miniprogram
 ```
-脚本会参考 `ynes` 项目的做法，自动寻找微信开发者工具的 `cli.bat`，首次找不到时允许手工输入，并把路径保存在仓库外的本机用户配置中。它会通过官方 CLI 的 `-o <项目目录>` 打开仓库根目录。
+脚本只从环境变量 `WECHAT_DEVTOOLS_CLI_PATH` 读取微信开发者工具 `cli.bat` 的完整路径，不再自动搜索、交互询问或写入本机配置文件。变量未设置、文件不存在或不是 `cli.bat` 时会直接报错。它会通过官方 CLI 的 `-o <项目目录>` 打开仓库根目录。
+
+PowerShell 当前会话可这样设置：
+
+```powershell
+$env:WECHAT_DEVTOOLS_CLI_PATH = 'C:\Program Files\Tencent\微信开发者工具\cli.bat'
+pnpm dev:miniprogram
+```
+
+如需持久保存到当前 Windows 用户环境变量，可使用 `setx WECHAT_DEVTOOLS_CLI_PATH "实际的 cli.bat 完整路径"`，然后重新打开终端。
 
 在 Linux Docker 容器内无法直接启动 Windows 宿主机 GUI，可以先执行：
 

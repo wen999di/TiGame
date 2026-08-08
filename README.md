@@ -59,7 +59,7 @@ pnpm dev
 | `pnpm lint` | ESLint 代码检查 |
 | `pnpm build` | 构建生产产物（同 `build:cloudflare`） |
 | `pnpm deploy:cloudflare` | 构建并部署到 Cloudflare |
-| `pnpm dev:miniprogram` | Windows 上自动打开微信开发者工具并载入本项目 |
+| `pnpm dev:miniprogram` | Windows 上通过 `WECHAT_DEVTOOLS_CLI_PATH` 指定的 CLI 打开微信开发者工具并载入本项目 |
 | `pnpm dev:miniprogram:check` | 仅检查小程序工程结构（容器内可运行） |
 
 ### 调试提示
