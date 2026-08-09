@@ -43,6 +43,7 @@ type TiGamePlatformBridge = {
   webBase?: string;
   getInviteCode?: () => string;
   getUserProfile?: () => TiGameUserProfile | null;
+  ensureUserProfile?: () => Promise<TiGameUserProfile | null>;
   clearInviteCode?: () => void;
   scanCode?: () => Promise<string>;
   setShareRoomId?: (roomId: string) => void;
@@ -1489,7 +1490,7 @@ function ProgressBar({ count, total }: { count: number; total: number }) {
 }
 
 export default function Home() {
-  const [platformProfile] = useState<TiGameUserProfile | null>(() => getPlatformBridge()?.getUserProfile?.() ?? null);
+  const [platformProfile, setPlatformProfile] = useState<TiGameUserProfile | null>(() => getPlatformBridge()?.getUserProfile?.() ?? null);
   const [screen, setScreen] = useState<Screen>("home");
   const [room, setRoom] = useState<Room | null>(null);
   const [notice, setNotice] = useState("");
@@ -2168,11 +2169,23 @@ export default function Home() {
       const url = `${socketBase}/api/ws?roomId=${encodeURIComponent(session.roomId)}&ticket=${encodeURIComponent(ticket)}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      let syncTimer: number | undefined;
+      const clearSyncTimer = () => {
+        if (syncTimer !== undefined) window.clearTimeout(syncTimer);
+        syncTimer = undefined;
+      };
       ws.onopen = () => {
         if (wsRef.current !== ws) return;
-        // 握手成功不代表快照已同步：先进入“同步中”，收到 hello/room 后再标记已连接。
+        // 握手成功后必须很快收到服务端 hello/room/approved。若首包丢失，主动重连，
+        // 避免 SocketTask 已 OPEN 但页面永久停在“正在恢复连接”。
         setWsStatus("connecting");
         setReconnectPhase("syncing");
+        clearSyncTimer();
+        syncTimer = window.setTimeout(() => {
+          if (wsRef.current !== ws || ws.readyState !== WebSocket.OPEN) return;
+          console.warn("[TiGame] WebSocket opened but room sync timed out; reconnecting");
+          try { ws.close(4000, "sync-timeout"); } catch {}
+        }, 6_000);
         // 连接恢复后立即重试未确认的转分（同一 operationId，服务端幂等去重）。
         nudgeTransferRetryRef.current?.();
         // 只在连接真正稳定后重置退避计数（B004）。
@@ -2186,9 +2199,17 @@ export default function Home() {
       ws.onmessage = (event) => {
         // 旧 socket 的延迟消息一律忽略（B024）。
         if (wsRef.current !== ws) return;
-        handleServerMessageRef.current(String(event.data));
+        const raw = String(event.data);
+        try {
+          const envelope = JSON.parse(raw) as { type?: string };
+          if (envelope.type === "hello" || envelope.type === "room" || envelope.type === "approved") clearSyncTimer();
+        } catch {
+          console.warn("[TiGame] ignored malformed WebSocket message", raw.slice(0, 160));
+        }
+        handleServerMessageRef.current(raw);
       };
       ws.onclose = (event) => {
+        clearSyncTimer();
         if (wsRef.current !== ws) return;
         const closedSession = socketSessionRef.current;
         wsRef.current = null;
@@ -3893,10 +3914,39 @@ export default function Home() {
     }
   };
 
+  const ensurePlatformProfile = async (): Promise<TiGameUserProfile | null> => {
+    const bridge = getPlatformBridge();
+    if (bridge?.kind !== "weapp") return platformProfile;
+    const cached = bridge.getUserProfile?.() ?? platformProfile;
+    if (cached?.nickname) {
+      if (cached !== platformProfile) setPlatformProfile(cached);
+      setForm({ name: cached.nickname });
+      setJoinName(cached.nickname);
+      return cached;
+    }
+    try {
+      const profile = await bridge.ensureUserProfile?.();
+      if (!profile?.nickname) throw new Error("未能获取微信昵称和头像");
+      setPlatformProfile(profile);
+      setForm({ name: profile.nickname });
+      setJoinName(profile.nickname);
+      return profile;
+    } catch (error) {
+      const detail = typeof (error as { errMsg?: unknown })?.errMsg === "string"
+        ? (error as { errMsg: string }).errMsg
+        : error instanceof Error ? error.message : "微信资料获取失败";
+      setNotice(detail);
+      return null;
+    }
+  };
+
   const createRoom = async () => {
     if (creatingRoom) return;
+    const bridge = getPlatformBridge();
+    const activeProfile = bridge?.kind === "weapp" ? await ensurePlatformProfile() : platformProfile;
+    if (bridge?.kind === "weapp" && !activeProfile) return;
     const trimmedName = form.name.trim();
-    const platformName = platformProfile?.nickname?.trim().slice(0, 12) || "";
+    const platformName = activeProfile?.nickname?.trim().slice(0, 12) || "";
     const playerName = platformName || trimmedName || "房主";
     if (!platformName && trimmedName) storeNickname(trimmedName);
     setCreatingRoom(true);
@@ -3913,7 +3963,7 @@ export default function Home() {
             body: JSON.stringify({
               roomId,
               hostName: playerName,
-              ...(platformProfile?.avatarData ? { hostAvatarData: platformProfile.avatarData } : {}),
+              ...(activeProfile?.avatarData ? { hostAvatarData: activeProfile.avatarData } : {}),
             }),
             signal: controller.signal,
           });
@@ -3983,8 +4033,11 @@ export default function Home() {
 
   const requestToJoin = async () => {
     const roomId = normalizeRoomId(joinCode);
+    const bridge = getPlatformBridge();
+    const activeProfile = bridge?.kind === "weapp" ? await ensurePlatformProfile() : platformProfile;
+    if (bridge?.kind === "weapp" && !activeProfile) return;
     const trimmedName = joinName.trim();
-    const platformName = platformProfile?.nickname?.trim().slice(0, 12) || "";
+    const platformName = activeProfile?.nickname?.trim().slice(0, 12) || "";
     const playerName = platformName || trimmedName || "新玩家";
     if (!platformName && trimmedName) storeNickname(trimmedName);
     setJoinStatus("submitting");
@@ -4001,7 +4054,7 @@ export default function Home() {
         body: JSON.stringify({
           roomId,
           playerName,
-          ...(platformProfile?.avatarData ? { avatarData: platformProfile.avatarData } : {}),
+          ...(activeProfile?.avatarData ? { avatarData: activeProfile.avatarData } : {}),
           ...(resumeCredential ?? {}),
         }),
       });
@@ -4044,7 +4097,10 @@ export default function Home() {
     }
   };
 
-  const beginFreshHomeFlow = (nextScreen: "create" | "join") => {
+  const beginFreshHomeFlow = async (nextScreen: "create" | "join") => {
+    // 小程序直接在用户点击“创建/加入”这一手势里请求微信资料；
+    // 微信自身负责授权弹窗，不再显示 TiGame 的独立身份入口页。
+    if (getPlatformBridge()?.kind === "weapp" && !(await ensurePlatformProfile())) return;
     // 恢复旧房间失败时，resuming 可能会随着 WebSocket 重连持续很久。
     // 用户主动选择“创建/加入”应始终优先：终止旧恢复并清掉持久化 session，
     // 避免旧连接稍后恢复后又把新流程强制切回大厅/游戏。
@@ -4066,8 +4122,8 @@ export default function Home() {
           <div className="hero-copy">
             <h1 id="site-title">TiGame</h1>
             <div className="home-actions">
-              <button className="button button-primary" onClick={() => beginFreshHomeFlow("create")}>创建房间 <span>↗</span></button>
-              <button className="button button-secondary" onClick={() => beginFreshHomeFlow("join")}>加入房间</button>
+              <button className="button button-primary" onClick={() => void beginFreshHomeFlow("create")}>创建房间 <span>↗</span></button>
+              <button className="button button-secondary" onClick={() => void beginFreshHomeFlow("join")}>加入房间</button>
             </div>
           </div>
           <div className="card-stage" aria-hidden="true">
@@ -4127,7 +4183,7 @@ export default function Home() {
             >{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</ActionButton>
           </ActionForm>}
           {joinStep === 1 && <div className="join-confirm">
-            <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>{getPlatformBridge()?.kind === "weapp" ? "确认微信身份" : "输入你的昵称"}</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
+            <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>{getPlatformBridge()?.kind === "weapp" ? "确认加入" : "输入你的昵称"}</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
             {getPlatformBridge()?.kind === "weapp" ? (
               <div className="miniapp-profile-lock"><span>微信昵称</span><strong>{platformProfile?.nickname || "微信用户"}</strong></div>
             ) : (<>

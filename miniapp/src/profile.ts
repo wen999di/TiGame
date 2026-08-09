@@ -24,6 +24,18 @@ export function saveWechatProfile(profile: WechatMiniProfile) {
   Taro.setStorageSync(WECHAT_PROFILE_STORAGE_KEY, profile);
 }
 
+export async function requestWechatProfile(): Promise<WechatMiniProfile> {
+  const cached = readWechatProfile();
+  if (cached) return cached;
+  const result = await Taro.getUserProfile({ desc: "用于游戏中显示微信头像和昵称" });
+  const nickname = result.userInfo.nickName.trim().slice(0, 12);
+  const avatarUrl = result.userInfo.avatarUrl || "";
+  if (!nickname || !avatarUrl) throw new Error("微信没有返回昵称或头像，请重试");
+  const profile = { nickname, avatarData: await makeAvatarThumbnail(avatarUrl) };
+  saveWechatProfile(profile);
+  return profile;
+}
+
 function readFileBase64(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     Taro.getFileSystemManager().readFile({

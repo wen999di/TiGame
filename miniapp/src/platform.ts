@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic BOM/Taro compatibility bridge */
 import Taro from "@tarojs/taro";
 import { document as taroDocument, navigator as taroNavigator, window as taroWindow } from "@tarojs/runtime";
-import { readWechatProfile } from "./profile";
+import { readWechatProfile, requestWechatProfile } from "./profile";
 
 declare const __TIGAME_API_BASE__: string;
 declare const __TIGAME_MINIAPP_DEBUG__: boolean;
 declare const wx: {
-  connectSocket?: (options: { url: string; tcpNoDelay?: boolean }) => any;
+  connectSocket?: (options: { url: string; tcpNoDelay?: boolean; success?: () => void; fail?: (error: unknown) => void }) => any;
 };
 
 type FetchInit = {
@@ -131,77 +131,147 @@ class MiniWebSocket {
   readonly CLOSING = 2;
   readonly CLOSED = 3;
   readyState = MiniWebSocket.CONNECTING;
-  onopen: ((event: unknown) => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: ((event: unknown) => void) | null = null;
-  onclose: ((event: { code?: number; reason?: string }) => void) | null = null;
+  private _onopen: ((event: unknown) => void) | null = null;
+  private _onmessage: ((event: { data: string }) => void) | null = null;
+  private _onerror: ((event: unknown) => void) | null = null;
+  private _onclose: ((event: { code?: number; reason?: string }) => void) | null = null;
+  private pendingOpen: unknown[] = [];
+  private pendingMessages: Array<{ data: string }> = [];
+  private pendingErrors: unknown[] = [];
+  private pendingClose: Array<{ code?: number; reason?: string }> = [];
   private task: any = null;
+
+  get onopen() { return this._onopen; }
+  set onopen(handler: ((event: unknown) => void) | null) {
+    this._onopen = handler;
+    if (!handler) return;
+    const queued = this.pendingOpen.splice(0);
+    for (const event of queued) handler(event);
+  }
+
+  get onmessage() { return this._onmessage; }
+  set onmessage(handler: ((event: { data: string }) => void) | null) {
+    this._onmessage = handler;
+    if (!handler) return;
+    const queued = this.pendingMessages.splice(0);
+    for (const event of queued) handler(event);
+  }
+
+  get onerror() { return this._onerror; }
+  set onerror(handler: ((event: unknown) => void) | null) {
+    this._onerror = handler;
+    if (!handler) return;
+    const queued = this.pendingErrors.splice(0);
+    for (const event of queued) handler(event);
+  }
+
+  get onclose() { return this._onclose; }
+  set onclose(handler: ((event: { code?: number; reason?: string }) => void) | null) {
+    this._onclose = handler;
+    if (!handler) return;
+    const queued = this.pendingClose.splice(0);
+    for (const event of queued) handler(event);
+  }
+
+  private emitOpen(event: unknown) {
+    if (this._onopen) this._onopen(event);
+    else this.pendingOpen.push(event);
+  }
+
+  private emitMessage(event: { data: string }) {
+    if (this._onmessage) this._onmessage(event);
+    else {
+      this.pendingMessages.push(event);
+      if (this.pendingMessages.length > 32) this.pendingMessages.shift();
+    }
+  }
+
+  private emitError(event: unknown) {
+    if (this._onerror) this._onerror(event);
+    else this.pendingErrors.push(event);
+  }
+
+  private emitClose(event: { code?: number; reason?: string }) {
+    if (this._onclose) this._onclose(event);
+    else this.pendingClose.push(event);
+  }
 
   constructor(url: string) {
     console.info(`[TiGame miniapp] WebSocket connecting: ${url}`);
     let openTimer: ReturnType<typeof setTimeout> | undefined;
+    let terminal = false;
+    const detailText = (detail: unknown) => typeof (detail as any)?.errMsg === "string"
+      ? (detail as any).errMsg
+      : typeof (detail as any)?.reason === "string" && (detail as any).reason
+        ? (detail as any).reason
+        : String(detail ?? "unknown");
     const debugNotice = (title: string, detail: unknown) => {
       if (!__TIGAME_MINIAPP_DEBUG__) return;
-      const message = typeof (detail as any)?.errMsg === "string"
-        ? (detail as any).errMsg
-        : typeof (detail as any)?.reason === "string" && (detail as any).reason
-          ? (detail as any).reason
-          : String(detail ?? "unknown");
-      void Taro.showModal({ title, content: `${url.replace(/\?.*$/, "")}\n${message}`.slice(0, 500), showCancel: false });
+      void Taro.showModal({ title, content: `${url.replace(/\?.*$/, "")}\n${detailText(detail)}`.slice(0, 500), showCancel: false });
+    };
+    const fail = (title: string, detail: unknown) => {
+      if (terminal) return;
+      terminal = true;
+      if (openTimer) clearTimeout(openTimer);
+      this.readyState = MiniWebSocket.CLOSED;
+      console.error(`[TiGame miniapp] ${title}: ${url}`, detail);
+      debugNotice(title, detail);
+      this.emitError(detail);
+      try { void this.task?.close?.({ code: 1000, reason: "connect-failed" }); } catch {}
+      this.emitClose({ code: 1006, reason: detailText(detail) });
     };
     const bind = (task: any) => {
       if (!task || typeof task.onOpen !== "function") throw new Error("微信没有返回 SocketTask");
       this.task = task;
       openTimer = setTimeout(() => {
-        if (this.readyState !== MiniWebSocket.OPEN) debugNotice("WebSocket 连接超时", "8 秒内未收到 onOpen");
+        if (this.readyState === MiniWebSocket.CONNECTING) fail("WebSocket 连接超时", "8 秒内未收到 onOpen");
       }, 8_000);
       task.onOpen?.((event: unknown) => {
+        if (terminal || this.readyState !== MiniWebSocket.CONNECTING) return;
         if (openTimer) clearTimeout(openTimer);
         this.readyState = MiniWebSocket.OPEN;
         console.info(`[TiGame miniapp] WebSocket open: ${url}`);
-        this.onopen?.(event);
+        this.emitOpen(event);
       });
       task.onMessage?.((event: { data: unknown }) => {
-        const data = typeof event.data === "string" ? event.data : String(event.data ?? "");
-        this.onmessage?.({ data });
+        if (terminal) return;
+        this.emitMessage({ data: socketDataToString(event.data) });
       });
-      task.onError?.((event: unknown) => {
-        if (openTimer) clearTimeout(openTimer);
-        console.error(`[TiGame miniapp] WebSocket failed: ${url}`, event);
-        debugNotice("WebSocket 连接失败", event);
-        this.onerror?.(event);
-      });
+      task.onError?.((event: unknown) => fail("WebSocket 连接失败", event));
       task.onClose?.((event: { code?: number; reason?: string }) => {
+        if (terminal) return;
+        terminal = true;
         if (openTimer) clearTimeout(openTimer);
         this.readyState = MiniWebSocket.CLOSED;
         console.info(`[TiGame miniapp] WebSocket closed: ${url}`, event);
-        this.onclose?.(event);
+        this.emitClose(event);
       });
     };
 
     try {
-      // Taro 4 会把 connectSocket Promise 化；直接拿微信原生 SocketTask，
-      // 在 connectSocket 返回的同一轮同步绑定 onOpen/onMessage，避免错过早期事件。
+      // 直接使用微信原生 SocketTask，并同时监听 connectSocket 的 fail 回调。
+      // SocketTask 的 open/message 可能早于共享 React 页给 WebSocket.on* 赋值，
+      // 因此上面会先缓存事件，赋值后再按顺序回放，避免丢掉首个 hello。
       const nativeTask = typeof wx !== "undefined"
-        ? wx.connectSocket?.({ url, tcpNoDelay: true })
+        ? wx.connectSocket?.({
+            url,
+            tcpNoDelay: true,
+            fail: (error: unknown) => setTimeout(() => fail("WebSocket 创建失败", error), 0),
+          })
         : undefined;
       if (nativeTask && typeof nativeTask.onOpen === "function") {
         bind(nativeTask);
         return;
       }
-      const connected = Taro.connectSocket({ url }) as any;
+      const connected = Taro.connectSocket({
+        url,
+        tcpNoDelay: true,
+        fail: (error: unknown) => setTimeout(() => fail("WebSocket 创建失败", error), 0),
+      } as any) as any;
       if (connected && typeof connected.onOpen === "function") bind(connected);
-      else Promise.resolve(connected).then(bind).catch((error) => {
-        this.readyState = MiniWebSocket.CLOSED;
-        debugNotice("WebSocket 创建失败", error);
-        this.onerror?.(error);
-        this.onclose?.({ reason: "connect failed" });
-      });
+      else Promise.resolve(connected).then(bind).catch((error) => fail("WebSocket 创建失败", error));
     } catch (error) {
-      this.readyState = MiniWebSocket.CLOSED;
-      debugNotice("WebSocket 创建失败", error);
-      this.onerror?.(error);
-      this.onclose?.({ reason: "connect failed" });
+      fail("WebSocket 创建失败", error);
     }
   }
 
@@ -215,6 +285,33 @@ class MiniWebSocket {
     this.readyState = MiniWebSocket.CLOSING;
     void this.task?.close?.({ code, reason });
   }
+}
+
+function socketDataToString(data: unknown) {
+  if (typeof data === "string") return data;
+  if (typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer) {
+    const bytes = new Uint8Array(data);
+    let result = "";
+    for (let index = 0; index < bytes.length;) {
+      const first = bytes[index++];
+      if (first < 0x80) { result += String.fromCodePoint(first); continue; }
+      if ((first & 0xe0) === 0xc0 && index < bytes.length) {
+        result += String.fromCodePoint(((first & 0x1f) << 6) | (bytes[index++] & 0x3f));
+        continue;
+      }
+      if ((first & 0xf0) === 0xe0 && index + 1 < bytes.length) {
+        result += String.fromCodePoint(((first & 0x0f) << 12) | ((bytes[index++] & 0x3f) << 6) | (bytes[index++] & 0x3f));
+        continue;
+      }
+      if ((first & 0xf8) === 0xf0 && index + 2 < bytes.length) {
+        result += String.fromCodePoint(((first & 0x07) << 18) | ((bytes[index++] & 0x3f) << 12) | ((bytes[index++] & 0x3f) << 6) | (bytes[index++] & 0x3f));
+        continue;
+      }
+      result += "�";
+    }
+    return result;
+  }
+  return String(data ?? "");
 }
 
 const storage = {
@@ -246,6 +343,7 @@ root.__TIGAME_PLATFORM__ = {
   webBase: apiBase,
   getInviteCode: currentInviteCode,
   getUserProfile: readWechatProfile,
+  ensureUserProfile: requestWechatProfile,
   clearInviteCode() {},
   async scanCode() {
     const result = await Taro.scanCode({ scanType: ["qrCode"] });
