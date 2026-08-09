@@ -1,8 +1,9 @@
 export default defineAppConfig({
   pages: ["pages/index/index"],
-  renderer: "webview",
   window: {
-    navigationStyle: "custom",
+    navigationBarTitleText: "TiGame",
+    navigationBarBackgroundColor: "#0b1726",
+    navigationBarTextStyle: "white",
     backgroundColor: "#0b1726",
     backgroundTextStyle: "light",
   },

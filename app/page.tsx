@@ -48,6 +48,7 @@ function getPlatformBridge(): TiGamePlatformBridge | undefined {
 type JoinFlight = {
   id: string;
   name: string;
+  avatarData?: string;
   key: number;
   from: { x: number; y: number };
   to: { x: number; y: number } | null;
@@ -78,6 +79,12 @@ type ServerMessage =
 
 const SESSION_STORAGE_KEY = "who-is-undercover:session";
 const NICKNAME_STORAGE_KEY = "who-is-undercover:nickname";
+const WECHAT_PROFILE_HASH_PREFIX = "#tigame-wx-profile=";
+
+type WechatShellProfile = {
+  nickname: string;
+  avatarData: string;
+};
 
 /** 全局动效 token：页面/步骤/弹层/Toast/列表统一时长（4.8）。 */
 const MOTION_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -364,6 +371,25 @@ function storeNickname(name: string) {
   } catch {
     // Ignore storage errors.
   }
+}
+
+function readWechatShellProfile(): WechatShellProfile | null {
+  if (typeof window === "undefined" || !window.location.hash.startsWith(WECHAT_PROFILE_HASH_PREFIX)) return null;
+  try {
+    const payload = JSON.parse(decodeURIComponent(window.location.hash.slice(WECHAT_PROFILE_HASH_PREFIX.length))) as Partial<WechatShellProfile> & { v?: number };
+    const nickname = typeof payload.nickname === "string" ? payload.nickname.trim().slice(0, 12) : "";
+    const avatarData = typeof payload.avatarData === "string" ? payload.avatarData : "";
+    if (!nickname || avatarData.length > 4_096 || !/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(avatarData)) return null;
+    return { nickname, avatarData };
+  } catch {
+    return null;
+  }
+}
+
+function avatarFace(name: string, avatarData?: string) {
+  return avatarData
+    ? <img className="avatar-image" src={avatarData} alt="" draggable={false} />
+    : name.slice(0, 1);
 }
 
 function playerNames(players: readonly Player[], playerIds: readonly string[]) {
@@ -1474,6 +1500,7 @@ function ProgressBar({ count, total }: { count: number; total: number }) {
 }
 
 export default function Home() {
+  const [wechatShellProfile] = useState<WechatShellProfile | null>(() => readWechatShellProfile());
   const [screen, setScreen] = useState<Screen>("home");
   const [room, setRoom] = useState<Room | null>(null);
   const [notice, setNotice] = useState("");
@@ -1510,7 +1537,7 @@ export default function Home() {
   const [justJoinedId, setJustJoinedId] = useState<string | null>(null);
   const justJoinedTimerRef = useRef<number | undefined>(undefined);
   // 申请行退场动效：服务器确认后先播放收起动画，再真正移除。
-  const [leavingRequests, setLeavingRequests] = useState<Array<{ id: string; playerName: string }>>([]);
+  const [leavingRequests, setLeavingRequests] = useState<Array<{ id: string; playerName: string; avatarData?: string }>>([]);
   // 飞行头像：申请列表的头像飞向玩家列表的对应位置。
   const [joinFlight, setJoinFlight] = useState<JoinFlight | null>(null);
   const joinFlightRef = useRef<JoinFlight | null>(null);
@@ -1521,7 +1548,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [joinCode, setJoinCode] = useState("");
-  const [joinName, setJoinName] = useState(() => readStoredNickname());
+  const [joinName, setJoinName] = useState(() => wechatShellProfile?.nickname || readStoredNickname());
   const [joinStep, setJoinStep] = useState(0);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraClosing, setCameraClosing] = useState(false);
@@ -1699,7 +1726,7 @@ export default function Home() {
   const [cardAnim, setCardAnim] = useState<{ playerId: string; kind: "penalize" | "swap" | "reward"; nonce: number } | null>(null);
   // 被惩罚玩家自己的弃牌揭示：由服务端私密事件触发，不进公共房间快照（B002/B015）。
   const [challengeReveal, setChallengeReveal] = useState<{ action: string; key: string } | null>(null);
-  const [form, setForm] = useState(() => ({ name: readStoredNickname() }));
+  const [form, setForm] = useState(() => ({ name: wechatShellProfile?.nickname || readStoredNickname() }));
 
   const roomRef = useRef<Room | null>(null);
   const sessionRef = useRef<StoredSession | null>(null);
@@ -1717,8 +1744,8 @@ export default function Home() {
   // 长按踢人成功后抑制同一次点击触发的投票（F015）。
   const suppressAvatarClickRef = useRef(false);
   // 批准动画在服务端事件中触发；这两个回调定义在后面，通过 ref 转发避免 TDZ。
-  const startJoinFlightRef = useRef<(id: string, name: string) => void>(() => {});
-  const beginRequestExitRef = useRef<(id: string, name: string) => void>(() => {});
+  const startJoinFlightRef = useRef<(id: string, name: string, avatarData?: string) => void>(() => {});
+  const beginRequestExitRef = useRef<(id: string, name: string, avatarData?: string) => void>(() => {});
   // 扫码成功后的统一退出/验证由后面的函数实现，通过 ref 转发（F008/F010）。
   const closeScannerRef = useRef<(reason: "button" | "scan" | "image") => Promise<void>>(async () => {});
   const verifyJoinCodeRef = useRef<(code: string) => Promise<boolean>>(async () => false);
@@ -1736,8 +1763,26 @@ export default function Home() {
   const handleServerMessageRef = useRef<(raw: string) => void>(() => {});
 
   useEffect(() => {
+    if (!wechatShellProfile) return;
+    storeNickname(wechatShellProfile.nickname);
+    if (window.location.hash.startsWith(WECHAT_PROFILE_HASH_PREFIX)) {
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }, [wechatShellProfile]);
+
+  useEffect(() => {
     roomRef.current = room;
   }, [room]);
+
+  // web-view 外壳分享时可从 payload.webViewUrl 读取当前地址；仅在微信 WebView 内
+  // 把当前房间号同步到 query，头像资料始终只放 fragment 且读取后立即清除。
+  useEffect(() => {
+    if (!wechatShellProfile) return;
+    const url = new URL(window.location.href);
+    if (room?.roomId) url.searchParams.set("invite", room.roomId);
+    else url.searchParams.delete("invite");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, [room?.roomId, wechatShellProfile]);
 
   const updateSecretCard = useCallback((nextCard: SecretCard | null) => {
     secretCardRef.current = nextCard;
@@ -2003,8 +2048,8 @@ export default function Home() {
         if (event?.game === "room" && event.kind === "join-approved") {
           const request = roomRef.current?.pendingJoinRequests.find((item) => item.id === event.playerId);
           if (request) {
-            beginRequestExitRef.current(request.id, request.playerName);
-            startJoinFlightRef.current(request.id, request.playerName);
+            beginRequestExitRef.current(request.id, request.playerName, request.avatarData);
+            startJoinFlightRef.current(request.id, request.playerName, request.avatarData);
           }
           setApprovingRequestId(null);
         }
@@ -3636,15 +3681,15 @@ export default function Home() {
   }, [flashJustJoined]);
 
   // 申请行退场：先播放收起动画，动画结束（或超时）后从 DOM 移除。
-  const beginRequestExit = useCallback((targetId: string, targetName: string) => {
-    setLeavingRequests((prev) => (prev.some((item) => item.id === targetId) ? prev : [...prev, { id: targetId, playerName: targetName }]));
+  const beginRequestExit = useCallback((targetId: string, targetName: string, avatarData?: string) => {
+    setLeavingRequests((prev) => (prev.some((item) => item.id === targetId) ? prev : [...prev, { id: targetId, playerName: targetName, ...(avatarData ? { avatarData } : {}) }]));
     window.setTimeout(() => {
       setLeavingRequests((prev) => prev.filter((item) => item.id !== targetId));
     }, 2000);
   }, []);
 
   // 记录申请列表头像的位置，生成一个“飞向玩家列表”的飞行头像。
-  const startJoinFlight = useCallback((targetId: string, targetName: string) => {
+  const startJoinFlight = useCallback((targetId: string, targetName: string, avatarData?: string) => {
     // 若上一枚飞行头像尚未落地，先让它提前落地，避免玩家行一直隐藏。
     if (incomingRef.current && incomingRef.current !== targetId) {
       completeIncomingJoin(incomingRef.current);
@@ -3656,6 +3701,7 @@ export default function Home() {
     const flight: JoinFlight = {
       id: targetId,
       name: targetName,
+      ...(avatarData ? { avatarData } : {}),
       key: Date.now(),
       from: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
       to: null,
@@ -3691,13 +3737,13 @@ export default function Home() {
     }
   };
 
-  const rejectJoinRequest = async (targetId: string, targetName: string) => {
+  const rejectJoinRequest = async (targetId: string, targetName: string, avatarData?: string) => {
     const ok = await sendCommand({ type: "reject-join", playerId: targetId });
     if (!ok) {
       setNotice("拒绝发送失败，请重试");
       return;
     }
-    beginRequestExit(targetId, targetName);
+    beginRequestExit(targetId, targetName, avatarData);
   };
 
   const askConfirm = (options: ConfirmDialog) => {
@@ -3896,6 +3942,7 @@ export default function Home() {
             body: JSON.stringify({
               roomId,
               hostName: playerName,
+              ...(wechatShellProfile?.avatarData ? { hostAvatarData: wechatShellProfile.avatarData } : {}),
             }),
             signal: controller.signal,
           });
@@ -3970,7 +4017,12 @@ export default function Home() {
       const response = await fetch("/api/join-requests", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ roomId, playerName, ...(resumeCredential ?? {}) }),
+        body: JSON.stringify({
+          roomId,
+          playerName,
+          ...(wechatShellProfile?.avatarData ? { avatarData: wechatShellProfile.avatarData } : {}),
+          ...(resumeCredential ?? {}),
+        }),
       });
       if (!response.ok) throw new Error(await apiError(response, "加入申请发送失败"));
       const payload = (await response.json()) as { playerId: string; token: string; resumed?: boolean };
@@ -4150,7 +4202,7 @@ export default function Home() {
           onPointerLeave={cancelLongPress}
           onPointerCancel={cancelLongPress}
           aria-label={`${player.name}${allowKick ? "，长按头像可管理" : ""}`}
-        >{player.name.slice(0, 1)}{voteState && extra?.ripple && <span className="vote-avatar-ripples" aria-hidden="true"><i /><i /><i /></span>}</span>
+        >{avatarFace(player.name, player.avatarData)}{voteState && extra?.ripple && <span className="vote-avatar-ripples" aria-hidden="true"><i /><i /><i /></span>}</span>
         {(showConfirm === "voted" || voteState?.selected || voteState?.confirmed) && <span className={`vote-your-label${voteState?.confirmed ? "" : voteState?.selected ? " vote-your-label-pending" : " vote-your-label-hidden"}`}>{voteState?.confirmed ? "你的投票" : voteState?.selected ? "再次点击确认" : ""}</span>}
       </span>
       <div className="player-meta">
@@ -4192,7 +4244,7 @@ export default function Home() {
     };
   }, [room, leavingRequests]);
 
-  const renderJoinRequestRow = (request: { id: string; playerName: string }, index: number, leaving: boolean) => (
+  const renderJoinRequestRow = (request: { id: string; playerName: string; avatarData?: string }, index: number, leaving: boolean) => (
     <div
       className={`join-request-row${leaving ? " leaving" : ""}`}
       key={request.id}
@@ -4204,11 +4256,11 @@ export default function Home() {
         }
       } : undefined}
     >
-      <span className="avatar avatar-sage">{request.playerName.slice(0, 1)}</span>
+      <span className="avatar avatar-sage">{avatarFace(request.playerName, request.avatarData)}</span>
       <strong>{request.playerName}</strong>
       <div className="join-request-actions">
         <button type="button" onClick={() => approveJoinRequest(request.id)} disabled={approvingRequestId === request.id}>{approvingRequestId === request.id ? "确认中…" : "确认"}</button>
-        <button className="reject-button" type="button" onClick={() => rejectJoinRequest(request.id, request.playerName)} disabled={approvingRequestId === request.id}>拒绝</button>
+        <button className="reject-button" type="button" onClick={() => rejectJoinRequest(request.id, request.playerName, request.avatarData)} disabled={approvingRequestId === request.id}>拒绝</button>
       </div>
     </div>
   );
@@ -4233,7 +4285,7 @@ export default function Home() {
         style={style}
         onAnimationEnd={handleFlightEnd}
         aria-hidden="true"
-      >{joinFlight.name.slice(0, 1)}</span>,
+      >{avatarFace(joinFlight.name, joinFlight.avatarData)}</span>,
       document.body,
     );
   };
@@ -4483,9 +4535,9 @@ export default function Home() {
             return (
               <div key={entry.playerId} className={`vote-tally${entry.playerId === eliminatedId ? " vote-tally-eliminated" : ""}`}>
                 {entry.playerId === eliminatedId && <span className="vote-tally-stamp">已淘汰</span>}
-                <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{candidate.name.slice(0, 1)}</span>}<small>{entry.playerName}</small></div>
+                <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, candidate.avatarData)}</span>}<small>{entry.playerName}</small></div>
                 <strong>{entry.count} 票</strong>
-                <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{voter.name.slice(0, 1)}</span> : null; })}</div>
+                <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, voter.avatarData)}</span> : null; })}</div>
               </div>
             );
           })}
@@ -4502,9 +4554,9 @@ export default function Home() {
               return (
                 <div key={entry.playerId} className={`vote-tally${entry.playerId === voteResult.eliminatedPlayerId ? " vote-tally-eliminated" : ""}`}>
                   {entry.playerId === voteResult.eliminatedPlayerId && <span className="vote-tally-stamp">已淘汰</span>}
-                  <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{candidate.name.slice(0, 1)}</span>}<small>{entry.playerName}</small></div>
+                  <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, candidate.avatarData)}</span>}<small>{entry.playerName}</small></div>
                   <strong>{entry.count} 票</strong>
-                  <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{voter.name.slice(0, 1)}</span> : null; })}</div>
+                  <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, voter.avatarData)}</span> : null; })}</div>
                 </div>
               );
             })}
@@ -4652,7 +4704,7 @@ export default function Home() {
             // 视觉上最多展示 4 张牌，多出的只计数不叠加。
             const stackCount = !isOut && !joinNext ? Math.min(Math.max(lives, 1), 4) : 0;
             return <m.div layout exit={{ opacity: 0, scale: 0.92, height: 0, marginBottom: 0 }} transition={motionTokens.layout} data-player-id={player.id} className={`player-row challenge-player-row${isOut || joinNext ? " player-eliminated" : ""}${incomingId === player.id ? " player-incoming" : justJoinedId === player.id ? " just-joined" : ""} ${player.online ? "" : "player-offline"}`} key={player.id}>
-              <span className={`avatar avatar-${player.color}`}>{player.name.slice(0, 1)}</span>
+              <span className={`avatar avatar-${player.color}`}>{avatarFace(player.name, player.avatarData)}</span>
               <div className="player-meta">
                 <strong>{player.name}{player.id === room?.hostId && <span className="host-tag">房主</span>}{player.id === room?.localPlayerId && <span className="me-tag">我</span>}{isOut && <span className="out-tag">淘汰</span>}{joinNext && <span className="out-tag">下一局加入</span>}</strong>
                 <small className="player-status-line">
@@ -4765,7 +4817,7 @@ export default function Home() {
                   </svg>
                 </span>
               )}
-              <span className={`avatar avatar-${player.color}${game.settleReadyPlayerIds.includes(player.id) ? " avatar-settle-ready" : ""}${game.resetReadyPlayerIds.includes(player.id) ? " avatar-reset-ready" : ""}`}>{player.name.slice(0, 1)}</span>
+              <span className={`avatar avatar-${player.color}${game.settleReadyPlayerIds.includes(player.id) ? " avatar-settle-ready" : ""}${game.resetReadyPlayerIds.includes(player.id) ? " avatar-reset-ready" : ""}`}>{avatarFace(player.name, player.avatarData)}</span>
               <span className="mahjong-tile-name">{player.name}{isSelf && "（我）"}</span>
               {player.joinNextRound && <small className="join-next-label">下一局自动加入游戏</small>}
               <span className="mahjong-tile-score">{score}</span>

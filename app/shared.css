@@ -1844,3 +1844,14 @@ html { overflow-x: clip; }
   from { transform: scale(1); opacity: 1; }
   to { transform: scale(1.9); opacity: 0; }
 }
+
+/* 微信小程序 WebView 传入的头像最终只是房间内的小缩略图。 */
+.avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}

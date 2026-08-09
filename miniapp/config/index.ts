@@ -1,9 +1,7 @@
-import path from "node:path";
 import { defineConfig } from "@tarojs/cli";
 
-const MINIAPP_ROOT = path.resolve(__dirname, "..");
 const outputRoot = process.env.TIGAME_MINIAPP_OUTPUT_ROOT || "../dist/miniapp";
-const apiBase = process.env.TIGAME_MINIAPP_API_BASE || "https://tigame.cavendish.dpdns.org";
+const webBase = process.env.TIGAME_MINIAPP_WEB_BASE || "https://tigame.cavendish.dpdns.org";
 
 export default defineConfig({
   projectName: "TiGame",
@@ -13,39 +11,14 @@ export default defineConfig({
   outputRoot,
   framework: "react",
   compiler: "webpack5",
-  compile: { include: [path.resolve(MINIAPP_ROOT, "../app")] },
-  plugins: ["@tarojs/plugin-html"],
   defineConstants: {
-    __TIGAME_API_BASE__: JSON.stringify(apiBase),
-  },
-  alias: {
-    react: path.resolve(MINIAPP_ROOT, "node_modules/react"),
-    qrcode: path.resolve(MINIAPP_ROOT, "src/shims/qrcode.ts"),
-    jsqr: path.resolve(MINIAPP_ROOT, "src/shims/jsqr.ts"),
-    "motion/react": path.resolve(MINIAPP_ROOT, "src/shims/motion.tsx"),
-    "@tigame/portal": path.resolve(MINIAPP_ROOT, "src/shims/react-dom.tsx"),
-    "@tigame/mahjong-history": path.resolve(MINIAPP_ROOT, "src/shims/MahjongHistory.tsx"),
-    "@tigame/mahjong-send-trace": path.resolve(MINIAPP_ROOT, "src/shims/MahjongSendTrace.tsx"),
+    __TIGAME_WEB_BASE__: JSON.stringify(webBase),
   },
   copy: {
-    patterns: [
-      { from: "../public/favicon.png", to: `${outputRoot}/favicon.png` },
-      { from: "assets/logo.png", to: `${outputRoot}/logo.png` },
-      { from: "src/sitemap.json", to: `${outputRoot}/sitemap.json` },
-    ],
+    patterns: [{ from: "src/sitemap.json", to: `${outputRoot}/sitemap.json` }],
     options: {},
   },
   mini: {
-    webpackChain(chain) {
-      chain.module
-        .rule("shared-react")
-        .test(/\.m?[tj]sx?$/i)
-        .include.add(path.resolve(MINIAPP_ROOT, "../app"))
-        .end()
-        .use("babel-loader")
-        .loader(require.resolve("babel-loader"))
-        .options({ configFile: path.resolve(MINIAPP_ROOT, "babel.config.js") });
-    },
     postcss: {
       pxtransform: { enable: false },
       url: { enable: true, config: { limit: 8192 } },
