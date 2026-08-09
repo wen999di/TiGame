@@ -146,7 +146,7 @@ async function prepareGeneratedProject() {
 function taroEnv(apiBase) {
   return {
     ...process.env,
-    TIGAME_MINIAPP_WEB_BASE: apiBase,
+    TIGAME_MINIAPP_API_BASE: apiBase,
     TIGAME_MINIAPP_OUTPUT_ROOT: "../.wechat-devtools/local/miniprogram",
   };
 }

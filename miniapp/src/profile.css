@@ -1,0 +1,22 @@
+.wechat-profile-shell {
+  min-height: 100vh;
+  padding: calc(var(--tigame-status-bar-height, 24px) + 56px) 24px 36px;
+  box-sizing: border-box;
+  background: #0b1726;
+  color: #f5ebdd;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.wechat-profile-eyebrow { color: #e96b5f; font-size: 13px; letter-spacing: 3px; font-weight: 700; }
+.wechat-profile-title { margin-top: 12px; font-size: 34px; line-height: 1.05; font-weight: 800; }
+.wechat-profile-hint { margin-top: 14px; color: #a9b8c9; font-size: 14px; line-height: 1.7; }
+.wechat-profile-card { margin-top: 26px; padding: 22px; border: 1px solid rgba(245,235,221,.18); border-radius: 24px; background: rgba(255,255,255,.05); display: flex; flex-direction: column; }
+.wechat-avatar-button { width: 88px !important; height: 88px; margin: 0 auto 24px !important; padding: 0; border-radius: 50%; background: #16283c; color: #f5ebdd; font-size: 13px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.wechat-avatar-button::after { border: 1px solid rgba(245,235,221,.25); border-radius: 50%; }
+.wechat-avatar-preview { width: 88px; height: 88px; display: block; }
+.wechat-profile-label { margin-bottom: 8px; color: #f5ebdd; font-size: 13px; font-weight: 700; }
+.wechat-profile-input { height: 48px; box-sizing: border-box; padding: 0 14px; border: 1px solid rgba(245,235,221,.2); border-radius: 14px; background: rgba(0,0,0,.16); color: #f5ebdd; font-size: 16px; }
+.wechat-profile-submit { width: 100% !important; margin: 18px 0 0 !important; background: #e96b5f; color: #0b1726; border-radius: 14px; font-size: 16px; font-weight: 800; }
+.wechat-profile-submit::after { border: 0; }
+.wechat-profile-error { margin-top: 12px; color: #ff9c92; font-size: 13px; }

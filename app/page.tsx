@@ -30,11 +30,17 @@ type StoredSession = {
 
 type PrivateCard = SecretCard | { action: string };
 
+type TiGameUserProfile = {
+  nickname: string;
+  avatarData?: string;
+};
+
 type TiGamePlatformBridge = {
   kind?: "weapp" | "web";
   apiBase?: string;
   webBase?: string;
   getInviteCode?: () => string;
+  getUserProfile?: () => TiGameUserProfile | null;
   clearInviteCode?: () => void;
   scanCode?: () => Promise<string>;
   setShareRoomId?: (roomId: string) => void;
@@ -79,12 +85,6 @@ type ServerMessage =
 
 const SESSION_STORAGE_KEY = "who-is-undercover:session";
 const NICKNAME_STORAGE_KEY = "who-is-undercover:nickname";
-const WECHAT_PROFILE_HASH_PREFIX = "#tigame-wx-profile=";
-
-type WechatShellProfile = {
-  nickname: string;
-  avatarData: string;
-};
 
 /** 全局动效 token：页面/步骤/弹层/Toast/列表统一时长（4.8）。 */
 const MOTION_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -370,19 +370,6 @@ function storeNickname(name: string) {
     window.localStorage.setItem(NICKNAME_STORAGE_KEY, name);
   } catch {
     // Ignore storage errors.
-  }
-}
-
-function readWechatShellProfile(): WechatShellProfile | null {
-  if (typeof window === "undefined" || !window.location.hash.startsWith(WECHAT_PROFILE_HASH_PREFIX)) return null;
-  try {
-    const payload = JSON.parse(decodeURIComponent(window.location.hash.slice(WECHAT_PROFILE_HASH_PREFIX.length))) as Partial<WechatShellProfile> & { v?: number };
-    const nickname = typeof payload.nickname === "string" ? payload.nickname.trim().slice(0, 12) : "";
-    const avatarData = typeof payload.avatarData === "string" ? payload.avatarData : "";
-    if (!nickname || avatarData.length > 4_096 || !/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(avatarData)) return null;
-    return { nickname, avatarData };
-  } catch {
-    return null;
   }
 }
 
@@ -1500,7 +1487,7 @@ function ProgressBar({ count, total }: { count: number; total: number }) {
 }
 
 export default function Home() {
-  const [wechatShellProfile] = useState<WechatShellProfile | null>(() => readWechatShellProfile());
+  const [platformProfile] = useState<TiGameUserProfile | null>(() => getPlatformBridge()?.getUserProfile?.() ?? null);
   const [screen, setScreen] = useState<Screen>("home");
   const [room, setRoom] = useState<Room | null>(null);
   const [notice, setNotice] = useState("");
@@ -1548,7 +1535,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [joinCode, setJoinCode] = useState("");
-  const [joinName, setJoinName] = useState(() => wechatShellProfile?.nickname || readStoredNickname());
+  const [joinName, setJoinName] = useState(() => platformProfile?.nickname || readStoredNickname());
   const [joinStep, setJoinStep] = useState(0);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraClosing, setCameraClosing] = useState(false);
@@ -1726,7 +1713,7 @@ export default function Home() {
   const [cardAnim, setCardAnim] = useState<{ playerId: string; kind: "penalize" | "swap" | "reward"; nonce: number } | null>(null);
   // 被惩罚玩家自己的弃牌揭示：由服务端私密事件触发，不进公共房间快照（B002/B015）。
   const [challengeReveal, setChallengeReveal] = useState<{ action: string; key: string } | null>(null);
-  const [form, setForm] = useState(() => ({ name: wechatShellProfile?.nickname || readStoredNickname() }));
+  const [form, setForm] = useState(() => ({ name: platformProfile?.nickname || readStoredNickname() }));
 
   const roomRef = useRef<Room | null>(null);
   const sessionRef = useRef<StoredSession | null>(null);
@@ -1763,26 +1750,8 @@ export default function Home() {
   const handleServerMessageRef = useRef<(raw: string) => void>(() => {});
 
   useEffect(() => {
-    if (!wechatShellProfile) return;
-    storeNickname(wechatShellProfile.nickname);
-    if (window.location.hash.startsWith(WECHAT_PROFILE_HASH_PREFIX)) {
-      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
-    }
-  }, [wechatShellProfile]);
-
-  useEffect(() => {
     roomRef.current = room;
   }, [room]);
-
-  // web-view 外壳分享时可从 payload.webViewUrl 读取当前地址；仅在微信 WebView 内
-  // 把当前房间号同步到 query，头像资料始终只放 fragment 且读取后立即清除。
-  useEffect(() => {
-    if (!wechatShellProfile) return;
-    const url = new URL(window.location.href);
-    if (room?.roomId) url.searchParams.set("invite", room.roomId);
-    else url.searchParams.delete("invite");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
-  }, [room?.roomId, wechatShellProfile]);
 
   const updateSecretCard = useCallback((nextCard: SecretCard | null) => {
     secretCardRef.current = nextCard;
@@ -3942,7 +3911,7 @@ export default function Home() {
             body: JSON.stringify({
               roomId,
               hostName: playerName,
-              ...(wechatShellProfile?.avatarData ? { hostAvatarData: wechatShellProfile.avatarData } : {}),
+              ...(platformProfile?.avatarData ? { hostAvatarData: platformProfile.avatarData } : {}),
             }),
             signal: controller.signal,
           });
@@ -4020,7 +3989,7 @@ export default function Home() {
         body: JSON.stringify({
           roomId,
           playerName,
-          ...(wechatShellProfile?.avatarData ? { avatarData: wechatShellProfile.avatarData } : {}),
+          ...(platformProfile?.avatarData ? { avatarData: platformProfile.avatarData } : {}),
           ...(resumeCredential ?? {}),
         }),
       });

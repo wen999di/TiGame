@@ -122,7 +122,6 @@ type DurableObjectContext = {
     get<T>(key: string): Promise<T | undefined>;
     put(key: string, value: unknown): Promise<void>;
     delete(key: string): Promise<void>;
-    deleteAll(): Promise<void>;
     setAlarm(time: number): Promise<void>;
     getAlarm(): Promise<number | null>;
     deleteAlarm(): Promise<void>;
@@ -1495,9 +1494,8 @@ export class GameRoom {
     this.tokens = {};
     this.processedTransfers = {};
     this.wsTickets = null;
-    // 房间是 DO 的完整生命周期边界：包括玩家头像缩略图在内的所有房间数据
-    // 都只存在于该对象。compatibility_date >= 2026-02-24 时 deleteAll() 也会
-    // 一并删除 alarm/内部存储元数据，避免关闭房间后继续占用 Durable Object Storage。
+    // 房间就是完整的数据生命周期边界：玩家头像缩略图、房间状态、ticket 等
+    // 都只存在这个 Durable Object 中；关闭房间时一次清空，避免留下头像数据。
     await this.ctx.storage.deleteAll();
   }
 

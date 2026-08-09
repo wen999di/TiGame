@@ -9,40 +9,42 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const CONFIG_PATH = path.join(REPO_ROOT, "miniapp", "config", "index.ts");
-const PAGE_JS_PATH = path.join(REPO_ROOT, "dist", "miniapp", "pages", "index", "index.js");
+const APP_JS_PATH = path.join(REPO_ROOT, "dist", "miniapp", "app.js");
 
 function fail(message) {
-  console.error(`[miniapp-webview] ${message}`);
+  console.error(`[miniapp-network] ${message}`);
   process.exitCode = 1;
 }
 
-function defaultWebBase(configSource) {
-  const match = configSource.match(/TIGAME_MINIAPP_WEB_BASE\s*\|\|\s*["']([^"']+)["']/);
-  if (!match) throw new Error(`Cannot find default TIGAME_MINIAPP_WEB_BASE in ${CONFIG_PATH}`);
+function defaultApiBase(configSource) {
+  const match = configSource.match(/TIGAME_MINIAPP_API_BASE\s*\|\|\s*["']([^"']+)["']/);
+  if (!match) throw new Error(`Cannot find default TIGAME_MINIAPP_API_BASE in ${CONFIG_PATH}`);
   return match[1];
 }
 
 const configSource = await readFile(CONFIG_PATH, "utf8");
-const webBase = (process.env.TIGAME_MINIAPP_WEB_BASE || defaultWebBase(configSource)).replace(/\/$/, "");
-const webUrl = new URL(webBase);
-const host = webUrl.hostname;
+const apiBase = (process.env.TIGAME_MINIAPP_API_BASE || defaultApiBase(configSource)).replace(/\/$/, "");
+const apiUrl = new URL(apiBase);
+const host = apiUrl.hostname;
+const socketProtocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
+const socketBase = `${socketProtocol}//${apiUrl.host}`;
 
-if (webUrl.protocol !== "https:") fail(`Cloud/preview build must use HTTPS, got ${webBase}`);
+if (apiUrl.protocol !== "https:") fail(`Cloud/true-device build must use HTTPS, got ${apiBase}`);
 if (host === "localhost" || host === "127.0.0.1" || isIP(host)) {
-  fail(`Cloud/preview build must use a real HTTPS business-domain hostname, got ${host}`);
+  fail(`Cloud/true-device build must use a real HTTPS hostname, got ${host}`);
 }
 
-let pageSource = "";
+let appSource = "";
 try {
-  pageSource = await readFile(PAGE_JS_PATH, "utf8");
+  appSource = await readFile(APP_JS_PATH, "utf8");
 } catch {
-  fail(`Build output not found: ${PAGE_JS_PATH}. Run the Taro build first.`);
+  fail(`Build output not found: ${APP_JS_PATH}. Run the Taro build first.`);
 }
-if (pageSource && !pageSource.includes(webBase)) {
-  fail(`Built page does not contain expected WebView base ${webBase}. Check build-time environment overrides.`);
+if (appSource && !appSource.includes(apiBase)) {
+  fail(`Built app.js does not contain expected API base ${apiBase}. Check build-time environment overrides.`);
 }
 
-console.log("Mini Program WebView endpoint embedded in this build:");
-console.log(`  业务域名: ${webUrl.origin}`);
-console.log("Configure it in 微信公众平台 → 开发管理/开发设置 → 业务域名 before preview/experience/release testing.");
-console.log("HTTP API and WebSocket now run inside the H5 WebView and use the website's normal HTTPS/WSS origin.");
+console.log("Mini Program network endpoints embedded in this build:");
+console.log(`  request 合法域名: ${apiUrl.origin}`);
+console.log(`  socket 合法域名:  ${socketBase}`);
+console.log("Configure both in 微信公众平台 → 开发管理/开发设置 → 服务器域名 before preview/experience/release testing.");

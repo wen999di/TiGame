@@ -152,6 +152,7 @@ h1 em::after { content: ""; position: absolute; left: 3px; right: -5px; bottom: 
 .player-list { margin: 20px 0 14px; border-top: 1px solid var(--line); }
 .player-row { min-height: 69px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .avatar { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: var(--night); font-weight: 800; font-size: 15px; }
+.avatar-image { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; display: block; }
 .avatar-coral { background: var(--coral); }.avatar-sage { background: var(--sage); }.avatar-gold { background: var(--gold); }.avatar-blue { background: var(--blue); }.avatar-plum { background: #b7a0c9; }.avatar-mint { background: #9fd4c0; }.avatar-rose { background: #e3a0a8; }.avatar-slate { background: #aebcc9; }.avatar-sun { background: #e3c56f; }.avatar-empty { border: 1px dashed rgba(169,184,201,.35); color: var(--muted); background: transparent; }
 .player-meta { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }.player-meta strong { font-size: 14px; }.player-meta small { color: var(--muted); font-size: 11px; }.host-tag { margin-left: 8px; padding: 3px 6px; border-radius: 4px; color: var(--coral); background: rgba(233,107,95,.1); font-size: 10px; font-weight: 600; }
 .ready-state { color: var(--muted); font-size: 11px; }.ready-state.ready { color: var(--sage); }.empty-row { opacity: .6; }
@@ -1843,15 +1844,4 @@ html { overflow-x: clip; }
 @keyframes mahjong-longpress-burst {
   from { transform: scale(1); opacity: 1; }
   to { transform: scale(1.9); opacity: 0; }
-}
-
-/* 微信小程序 WebView 传入的头像最终只是房间内的小缩略图。 */
-.avatar-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-  pointer-events: none;
-  user-select: none;
 }

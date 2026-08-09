@@ -1,5 +1,5 @@
 {
-  "description": "TiGame 微信小程序 WebView 壳",
+  "description": "TiGame Taro 4 微信小程序",
   "miniprogramRoot": "dist/miniapp/",
   "compileType": "miniprogram",
   "setting": {

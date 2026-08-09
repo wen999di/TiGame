@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "esnext"],
+    "lib": [
+      "dom",
+      "esnext"
+    ],
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -9,9 +12,40 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "noEmit": true,
-    "types": ["@tarojs/taro", "node"]
+    "types": [
+      "@tarojs/taro",
+      "node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "motion/react": [
+        "src/shims/motion.tsx"
+      ],
+      "qrcode": [
+        "src/shims/qrcode.ts"
+      ],
+      "jsqr": [
+        "src/shims/jsqr.ts"
+      ],
+      "@tigame/portal": [
+        "src/shims/react-dom.tsx"
+      ],
+      "@tigame/mahjong-history": [
+        "src/shims/MahjongHistory.tsx"
+      ],
+      "@tigame/mahjong-send-trace": [
+        "src/shims/MahjongSendTrace.tsx"
+      ]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "../app/page.tsx",
+    "../app/game/**/*.ts",
+    "../app/components/FlipText.tsx"
+  ]
 }

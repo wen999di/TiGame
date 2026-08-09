@@ -1,4 +1,6 @@
 export default definePageConfig({
-  navigationBarTitleText: "TiGame",
+  renderer: "webview",
+  navigationStyle: "custom",
+  disableScroll: false,
   enableShareAppMessage: true,
 });
