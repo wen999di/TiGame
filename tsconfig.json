@@ -35,6 +35,9 @@
       ],
       "@tigame/portal": [
         "./app/platform/portal.ts"
+      ],
+      "@tigame/form-controls": [
+        "./app/platform/form-controls.tsx"
       ]
     }
   },

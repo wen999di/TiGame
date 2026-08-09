@@ -38,6 +38,9 @@
       ],
       "@tigame/mahjong-send-trace": [
         "src/shims/MahjongSendTrace.tsx"
+      ],
+      "@tigame/form-controls": [
+        "src/shims/form-controls.tsx"
       ]
     }
   },

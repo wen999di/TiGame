@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { createPortal } from "@tigame/portal";
+import { ActionButton, ActionForm } from "@tigame/form-controls";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
@@ -4082,17 +4083,17 @@ export default function Home() {
       <div className="inner-topbar"><button className="back-button" onClick={() => void goHome()}>← <span>返回</span></button><span className="inner-label">创建房间</span></div>
       <section className="form-layout">
         <div className="form-intro"><span className="eyebrow">准备开局</span><h1>先把房间<br /><em>开起来</em></h1></div>
-        <form className="glass-card form-card" onSubmit={handleCreate}>
+        <ActionForm className="glass-card form-card" onSubmit={handleCreate}>
           <label className="field-label" htmlFor="host-name">你的昵称</label>
           <input id="host-name" className="text-input" value={form.name} onChange={(event) => setForm({ name: event.target.value })} maxLength={12} autoFocus />
           
-          <button
+          <ActionButton
             className="button button-primary form-submit"
-            type={getPlatformBridge()?.kind === "weapp" ? "button" : "submit"}
+            type="submit"
             onClick={getPlatformBridge()?.kind === "weapp" ? () => void createRoom() : undefined}
             disabled={creatingRoom}
-          >{creatingRoom ? "正在创建…" : "创建房间"} {!creatingRoom && <span>↗</span>}</button>
-        </form>
+          >{creatingRoom ? "正在创建…" : "创建房间"} {!creatingRoom && <span>↗</span>}</ActionButton>
+        </ActionForm>
       </section>
     </main>
   );
@@ -4103,21 +4104,21 @@ export default function Home() {
       <section className="join-layout">
         <div className="join-copy"><span className="eyebrow">收到邀请</span><h1>加入<br /><em>房间</em></h1><p>输入邀请码或扫码，由房主确认后即可进入房间。</p><div className="join-steps"><span className={joinStep >= 0 ? "step active" : "step"}>01</span><i /><span className={joinStep >= 1 ? "step active" : "step"}>02</span><i /><span className={joinStep >= 2 ? "step active" : "step"}>03</span></div></div>
         <div className="glass-card join-card"><AnimatePresence mode="wait" initial={false}><m.div key={joinStep} className="join-step-motion" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={motionTokens.step}>
-          {joinStep === 0 && <form onSubmit={handleJoin}>
+          {joinStep === 0 && <ActionForm onSubmit={handleJoin}>
             <label className="field-label" htmlFor="join-code">邀请码</label>
             <input id="join-code" className="text-input invite-input" value={joinCode} onChange={(event) => {
   const compact = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   setJoinCode(compact.length > 3 ? `${compact.slice(0, 3)}-${compact.slice(3)}` : compact);
 }} placeholder="例如：K7P-4M2" maxLength={12} autoFocus />
             <div className="join-or"><span>或</span></div>
-            <button className="scan-button" type="button" onClick={openScanner}><span className="scan-icon">⌗</span> 扫描房主二维码</button>
-            <button
+            <ActionButton className="scan-button" type="button" onClick={openScanner}><span className="scan-icon">⌗</span> 扫描房主二维码</ActionButton>
+            <ActionButton
               className="button button-primary form-submit"
-              type={getPlatformBridge()?.kind === "weapp" ? "button" : "submit"}
+              type="submit"
               onClick={getPlatformBridge()?.kind === "weapp" ? () => void checkJoinRoom() : undefined}
               disabled={checkingJoin}
-            >{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</button>
-          </form>}
+            >{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</ActionButton>
+          </ActionForm>}
           {joinStep === 1 && <div className="join-confirm">
             <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>输入你的昵称</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
             <label className="field-label" htmlFor="join-name">昵称</label>

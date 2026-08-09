@@ -22,6 +22,14 @@
 
 .h5-button::after { border: 0; }
 
+/* Critical form actions use native Taro Button nodes instead of plugin-html buttons. */
+.tigame-native-button {
+  margin: 0;
+  line-height: normal;
+}
+
+.tigame-native-button::after { border: 0; }
+
 /* Use literal colors as a fallback even if a client does not inherit CSS variables. */
 .button-primary {
   background: #e96b5f;
