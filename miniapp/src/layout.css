@@ -380,3 +380,9 @@
 }
 .miniapp-profile-lock span { color: #a9b8c9; font-size: 12px; }
 .miniapp-profile-lock strong { color: #f5ebdd; font-size: 17px; }
+
+/* 断线/恢复提示放在沉浸式状态栏和胶囊导航区域下方；不改变页面本身的沉浸式顶栏。 */
+.connection-recovery-banner,
+.resume-banner {
+  top: calc(var(--tigame-status-bar-height, 24px) + var(--tigame-nav-height, 52px) + 8px);
+}

@@ -44,6 +44,7 @@ type TiGamePlatformBridge = {
   getInviteCode?: () => string;
   getUserProfile?: () => TiGameUserProfile | null;
   ensureUserProfile?: () => Promise<TiGameUserProfile | null>;
+  connectWebSocket?: (url: string) => WebSocket;
   clearInviteCode?: () => void;
   scanCode?: () => Promise<string>;
   setShareRoomId?: (roomId: string) => void;
@@ -151,7 +152,9 @@ function extractInviteCode(value: string) {
 }
 
 /** 通过认证 HTTP 换取 30 秒单次使用的 WebSocket ticket，URL 不再携带长期 token（B021）。 */
-async function fetchWsTicket(session: StoredSession): Promise<string | null> {
+type WsTicketResult = { ticket: string; error: null } | { ticket: null; error: string };
+
+async function fetchWsTicket(session: StoredSession): Promise<WsTicketResult> {
   try {
     const response = await fetch(
       `/api/ws-ticket?roomId=${encodeURIComponent(session.roomId)}&playerId=${encodeURIComponent(session.playerId)}`,
@@ -163,11 +166,15 @@ async function fetchWsTicket(session: StoredSession): Promise<string | null> {
         },
       },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const detail = await apiError(response, "连接凭证获取失败");
+      return { ticket: null, error: `HTTP ${response.status}: ${detail}` };
+    }
     const payload = (await response.json()) as { ticket?: string };
-    return payload.ticket ?? null;
-  } catch {
-    return null;
+    if (!payload.ticket) return { ticket: null, error: "服务器未返回 WebSocket ticket" };
+    return { ticket: payload.ticket, error: null };
+  } catch (error) {
+    return { ticket: null, error: error instanceof Error ? error.message : "网络请求失败" };
   }
 }
 
@@ -240,11 +247,13 @@ function removeTransferFromOutbox(operationId: string) {
   writeTransferOutbox(readTransferOutbox().filter((item) => item.operationId !== operationId));
 }
 
-type ReconnectPhase = "idle" | "retrying" | "waiting-network" | "syncing";
+type ReconnectPhase = "idle" | "ticketing" | "socket" | "retrying" | "waiting-network" | "syncing";
 
 /** 连接状态胶囊文案：区分同步中/等待网络/重连中。 */
 function connectionLabel(wsStatus: "closed" | "connecting" | "open", reconnectPhase: ReconnectPhase): string {
   if (wsStatus === "open") return "已连接";
+  if (reconnectPhase === "ticketing") return "获取连接凭证…";
+  if (reconnectPhase === "socket") return "连接服务器…";
   if (reconnectPhase === "syncing") return "正在同步…";
   if (reconnectPhase === "waiting-network") return "等待网络恢复";
   return "重连中…";
@@ -2156,18 +2165,26 @@ export default function Home() {
     };
 
     // 通过认证 HTTP 换取单次使用的 ticket，URL 不再携带长期 token（B021）。
-    void fetchWsTicket(session).then((ticket) => {
+    setReconnectPhase("ticketing");
+    void fetchWsTicket(session).then((ticketResult) => {
       if (stoppedRef.current || sessionRef.current !== session) return;
-      if (!ticket) {
+      if (!ticketResult.ticket) {
         setWsStatus("closed");
+        setReconnectPhase("retrying");
+        console.error("[TiGame] WebSocket ticket failed", ticketResult.error);
+        if (getPlatformBridge()?.kind === "weapp" && reconnectAttemptRef.current === 0) {
+          setNotice(`连接凭证获取失败：${ticketResult.error}`);
+        }
         scheduleRetry(session);
         return;
       }
       const socketBase = platformApiBase
         ? platformApiBase.replace(/^https?:/, protocol)
         : `${protocol}//${window.location.host}`;
-      const url = `${socketBase}/api/ws?roomId=${encodeURIComponent(session.roomId)}&ticket=${encodeURIComponent(ticket)}`;
-      const ws = new WebSocket(url);
+      const url = `${socketBase}/api/ws?roomId=${encodeURIComponent(session.roomId)}&ticket=${encodeURIComponent(ticketResult.ticket)}`;
+      setReconnectPhase("socket");
+      const platformSocket = getPlatformBridge()?.connectWebSocket;
+      const ws = platformSocket ? platformSocket(url) : new WebSocket(url);
       wsRef.current = ws;
       let syncTimer: number | undefined;
       const clearSyncTimer = () => {
@@ -5174,7 +5191,15 @@ export default function Home() {
         {room && wsStatus !== "open" && (
           <div className="connection-recovery-banner" role="status" aria-live="polite">
             <span className="connection-recovery-spinner" aria-hidden="true" />
-            <strong>{reconnectPhase === "waiting-network" ? "网络已断开" : "正在恢复连接"}</strong>
+            <strong>{reconnectPhase === "waiting-network"
+              ? "网络已断开"
+              : reconnectPhase === "ticketing"
+                ? "正在获取连接凭证"
+                : reconnectPhase === "socket"
+                  ? "正在连接服务器"
+                  : reconnectPhase === "syncing"
+                    ? "正在同步房间"
+                    : "正在恢复连接"}</strong>
           </div>
         )}
         {resuming && <div className="resume-banner" role="status" aria-live="polite"><span className="resume-spinner" aria-hidden="true" />正在回到之前的房间…</div>}

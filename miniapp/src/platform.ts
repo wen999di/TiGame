@@ -344,6 +344,7 @@ root.__TIGAME_PLATFORM__ = {
   getInviteCode: currentInviteCode,
   getUserProfile: readWechatProfile,
   ensureUserProfile: requestWechatProfile,
+  connectWebSocket: (url: string) => new MiniWebSocket(url) as unknown as WebSocket,
   clearInviteCode() {},
   async scanCode() {
     const result = await Taro.scanCode({ scanType: ["qrCode"] });
@@ -354,7 +355,11 @@ root.__TIGAME_PLATFORM__ = {
 };
 
 root.fetch = miniFetch;
+// 共享 React 代码既会读取全局 WebSocket，也会读取 Taro window 上的 WebSocket 常量。
+// 三个入口统一指向同一适配器，避免构造器已桥接但 OPEN/CONNECTING 常量来自另一实现。
 root.WebSocket = MiniWebSocket;
+win.WebSocket = MiniWebSocket;
+globalWin.WebSocket = MiniWebSocket;
 root.localStorage = storage;
 root.window ??= win;
 root.document ??= taroDocument;
