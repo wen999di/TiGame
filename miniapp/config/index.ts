@@ -17,7 +17,6 @@ export default defineConfig({
   plugins: ["@tarojs/plugin-html"],
   defineConstants: {
     __TIGAME_API_BASE__: JSON.stringify(apiBase),
-    __TIGAME_MINIAPP_DEBUG__: JSON.stringify(process.env.TIGAME_MINIAPP_DEBUG === "1"),
   },
   alias: {
     react: path.resolve(MINIAPP_ROOT, "node_modules/react"),

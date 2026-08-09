@@ -51,7 +51,6 @@ function cloudEnv() {
   return {
     ...process.env,
     TIGAME_MINIAPP_API_BASE: CLOUD_API_BASE,
-    TIGAME_MINIAPP_DEBUG: "1",
   };
 }
 

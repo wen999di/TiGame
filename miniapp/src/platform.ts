@@ -4,7 +4,6 @@ import { document as taroDocument, navigator as taroNavigator, window as taroWin
 import { readWechatProfile, requestWechatProfile } from "./profile";
 
 declare const __TIGAME_API_BASE__: string;
-declare const __TIGAME_MINIAPP_DEBUG__: boolean;
 declare const wx: {
   connectSocket?: (options: { url: string; tcpNoDelay?: boolean; success?: () => void; fail?: (error: unknown) => void }) => any;
 };
@@ -111,10 +110,6 @@ async function miniFetch(input: string | URL, init: FetchInit = {}) {
   } catch (error) {
     console.error(`[TiGame miniapp] request failed: ${method} ${url}`, error);
     if (init.signal?.aborted) throw new MiniDOMException("The operation was aborted", "AbortError");
-    if (method === "POST" && url.endsWith("/api/rooms")) {
-      const detail = typeof (error as any)?.errMsg === "string" ? (error as any).errMsg : String(error);
-      void Taro.showModal({ title: "创建房间请求失败", content: detail, showCancel: false });
-    }
     throw error;
   } finally {
     init.signal?.removeEventListener?.("abort", abort);
@@ -205,17 +200,12 @@ class MiniWebSocket {
       : typeof (detail as any)?.reason === "string" && (detail as any).reason
         ? (detail as any).reason
         : String(detail ?? "unknown");
-    const debugNotice = (title: string, detail: unknown) => {
-      if (!__TIGAME_MINIAPP_DEBUG__) return;
-      void Taro.showModal({ title, content: `${url.replace(/\?.*$/, "")}\n${detailText(detail)}`.slice(0, 500), showCancel: false });
-    };
     const fail = (title: string, detail: unknown) => {
       if (terminal) return;
       terminal = true;
       if (openTimer) clearTimeout(openTimer);
       this.readyState = MiniWebSocket.CLOSED;
       console.error(`[TiGame miniapp] ${title}: ${url}`, detail);
-      debugNotice(title, detail);
       this.emitError(detail);
       try { void this.task?.close?.({ code: 1000, reason: "connect-failed" }); } catch {}
       this.emitClose({ code: 1006, reason: detailText(detail) });

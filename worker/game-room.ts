@@ -1262,6 +1262,9 @@ export class GameRoom {
       }
       case "leave": {
         if (player.id === this.roomState.hostId) {
+          // 房主离开会销毁整个房间，但仍要先确认当前 leave 命令。
+          // 否则客户端会一直等待 ACK，直到命令超时后才清理本地会话。
+          safeSend(ws, { type: "ack", id: commandId, ok: true, revision: this.roomState.revision });
           await this.closeRoom("房主已离开，房间已关闭");
           return;
         }
