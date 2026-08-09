@@ -3936,7 +3936,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (error instanceof Error && error.name === "AbortError") {
         setNotice("创建房间超时，请重试");
       } else {
         setNotice(error instanceof Error ? error.message : "创建房间失败");

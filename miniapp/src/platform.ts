@@ -27,6 +27,47 @@ function absoluteUrl(input: string) {
   return `${apiBase}${input.startsWith("/") ? input : `/${input}`}`;
 }
 
+class MiniDOMException extends Error {
+  constructor(message = "", name = "Error") {
+    super(message);
+    this.name = name;
+  }
+}
+
+class MiniAbortSignal {
+  aborted = false;
+  private listeners = new Set<() => void>();
+
+  addEventListener(type: string, listener: unknown) {
+    if (type === "abort" && typeof listener === "function") this.listeners.add(listener as () => void);
+  }
+
+  removeEventListener(type: string, listener: unknown) {
+    if (type === "abort" && typeof listener === "function") this.listeners.delete(listener as () => void);
+  }
+
+  abort() {
+    if (this.aborted) return;
+    this.aborted = true;
+    for (const listener of [...this.listeners]) listener();
+    this.listeners.clear();
+  }
+}
+
+class MiniAbortController {
+  readonly signal = new MiniAbortSignal();
+  abort() { this.signal.abort(); }
+}
+
+// 微信小程序 JSCore 并不保证存在浏览器的 AbortController / DOMException。
+// 共享页面的创建房间超时逻辑依赖二者，所以必须在业务模块执行前补齐。
+root.AbortController ??= MiniAbortController;
+root.DOMException ??= MiniDOMException;
+win.AbortController ??= root.AbortController;
+win.DOMException ??= root.DOMException;
+globalWin.AbortController ??= root.AbortController;
+globalWin.DOMException ??= root.DOMException;
+
 class MiniResponse {
   status: number;
   ok: boolean;
@@ -47,9 +88,12 @@ class MiniResponse {
 }
 
 async function miniFetch(input: string | URL, init: FetchInit = {}) {
+  const url = absoluteUrl(String(input));
+  const method = init.method?.toUpperCase() || "GET";
+  console.info(`[TiGame miniapp] request ${method} ${url}`);
   const request = Taro.request({
-    url: absoluteUrl(String(input)),
-    method: (init.method?.toUpperCase() || "GET") as any,
+    url,
+    method: method as any,
     header: init.headers,
     data: init.body,
     dataType: "json",
@@ -58,9 +102,15 @@ async function miniFetch(input: string | URL, init: FetchInit = {}) {
   init.signal?.addEventListener?.("abort", abort, { once: true });
   try {
     const response = await request;
+    console.info(`[TiGame miniapp] response ${method} ${url}: ${response.statusCode}`);
     return new MiniResponse(response.statusCode, response.data) as unknown as Response;
   } catch (error) {
-    console.error(`[TiGame miniapp] request failed: ${absoluteUrl(String(input))}`, error);
+    console.error(`[TiGame miniapp] request failed: ${method} ${url}`, error);
+    if (init.signal?.aborted) throw new MiniDOMException("The operation was aborted", "AbortError");
+    if (method === "POST" && url.endsWith("/api/rooms")) {
+      const detail = typeof (error as any)?.errMsg === "string" ? (error as any).errMsg : String(error);
+      void Taro.showModal({ title: "创建房间请求失败", content: detail, showCancel: false });
+    }
     throw error;
   } finally {
     init.signal?.removeEventListener?.("abort", abort);
