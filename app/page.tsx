@@ -3891,8 +3891,7 @@ export default function Home() {
     }
   };
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const createRoom = async () => {
     if (creatingRoom) return;
     const trimmedName = form.name.trim();
     const playerName = trimmedName || "房主";
@@ -3946,8 +3945,12 @@ export default function Home() {
     }
   };
 
-  const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    void createRoom();
+  };
+
+  const checkJoinRoom = async () => {
     if (checkingJoin) return;
     const roomId = normalizeRoomId(joinCode);
     if (!ROOM_ID_PATTERN.test(roomId)) {
@@ -3968,6 +3971,11 @@ export default function Home() {
     } finally {
       setCheckingJoin(false);
     }
+  };
+
+  const handleJoin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void checkJoinRoom();
   };
 
   const requestToJoin = async () => {
@@ -4078,7 +4086,12 @@ export default function Home() {
           <label className="field-label" htmlFor="host-name">你的昵称</label>
           <input id="host-name" className="text-input" value={form.name} onChange={(event) => setForm({ name: event.target.value })} maxLength={12} autoFocus />
           
-          <button className="button button-primary form-submit" type="submit" disabled={creatingRoom}>{creatingRoom ? "正在创建…" : "创建房间"} {!creatingRoom && <span>↗</span>}</button>
+          <button
+            className="button button-primary form-submit"
+            type={getPlatformBridge()?.kind === "weapp" ? "button" : "submit"}
+            onClick={getPlatformBridge()?.kind === "weapp" ? () => void createRoom() : undefined}
+            disabled={creatingRoom}
+          >{creatingRoom ? "正在创建…" : "创建房间"} {!creatingRoom && <span>↗</span>}</button>
         </form>
       </section>
     </main>
@@ -4098,7 +4111,12 @@ export default function Home() {
 }} placeholder="例如：K7P-4M2" maxLength={12} autoFocus />
             <div className="join-or"><span>或</span></div>
             <button className="scan-button" type="button" onClick={openScanner}><span className="scan-icon">⌗</span> 扫描房主二维码</button>
-            <button className="button button-primary form-submit" type="submit" disabled={checkingJoin}>{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</button>
+            <button
+              className="button button-primary form-submit"
+              type={getPlatformBridge()?.kind === "weapp" ? "button" : "submit"}
+              onClick={getPlatformBridge()?.kind === "weapp" ? () => void checkJoinRoom() : undefined}
+              disabled={checkingJoin}
+            >{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</button>
           </form>}
           {joinStep === 1 && <div className="join-confirm">
             <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>输入你的昵称</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
