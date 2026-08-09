@@ -6,7 +6,7 @@
     "dev:weapp": "taro build --type weapp --watch",
     "build:weapp": "taro build --type weapp",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "check:weapp": "tsc --noEmit -p tsconfig.json && taro build --type weapp"
+    "check:weapp": "tsc --noEmit -p tsconfig.json && taro build --type weapp && node ../scripts/check-miniapp-network.mjs"
   },
   "dependencies": {
     "@tarojs/components": "4.2.1",

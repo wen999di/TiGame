@@ -22,7 +22,8 @@
     "dev:miniprogram:check": "corepack pnpm --filter @tigame/miniapp build:weapp && node scripts/open-wechat-devtools.mjs --check",
     "deploy:miniprogram:ci": "bash scripts/upload-wechat-miniapp.sh",
     "dev:miniprogram:cloud": "node scripts/dev-miniprogram.mjs",
-    "dev:miniprogram:local": "node scripts/dev-miniprogram-local.mjs"
+    "dev:miniprogram:local": "node scripts/dev-miniprogram-local.mjs",
+    "check:miniprogram:network": "node scripts/check-miniapp-network.mjs"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

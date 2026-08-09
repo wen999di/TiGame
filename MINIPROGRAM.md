@@ -45,6 +45,10 @@ pnpm dev:miniprogram:check     # 构建后仅检查微信工程结构，容器�
 - **request 合法域名**：`https://tigame.cavendish.dpdns.org`
 - **socket 合法域名**：`wss://tigame.cavendish.dpdns.org`
 
+构建后可执行 `pnpm check:miniprogram:network`，它会从 Taro 配置和 `dist/miniapp/app.js` 双重确认当前包实际嵌入的 HTTP/WSS 基址，并打印应填写到微信公众平台的两个域名。如果后台拒绝该域名（例如域名资质/备案不满足微信要求），必须换成符合要求的自有 HTTPS 域名，再通过 `TIGAME_MINIAPP_API_BASE=https://...` 构建；正式版不能靠关闭域名校验绕过。
+
+仓库开发者工具工程默认设置 `urlCheck: false`，便于“真机调试”直接排查 Taro/接口问题；这只是开发者工具的调试豁免，不会替代微信后台的服务器域名白名单。体验版、审核版和正式版仍必须配置上面的 request/socket 域名。`pnpm check:miniprogram:network` 会继续检查构建产物实际嵌入的地址，避免调试豁免掩盖构建地址漂移。
+
 ## 本地 Worker 联调
 
 Windows 开发机可运行：
@@ -80,7 +84,7 @@ pnpm dev:miniprogram:local -- --ip 192.168.x.x
 pnpm dev:miniprogram:local -- --check
 ```
 
-`.wechat-devtools/` 和 `dist/` 都是生成目录，不要直接修改。真机访问本地 Worker 时，手机和电脑需在同一 LAN/Wi-Fi，并确保 Windows 防火墙允许 5173 入站。
+`.wechat-devtools/` 和 `dist/` 都是生成目录，不要直接修改。真机访问本地 Worker 时，手机和电脑需在同一 LAN/Wi-Fi，并确保 Windows 防火墙允许 5173 入站。本地模式使用 `http://<电脑IP>:5173` / `ws://<电脑IP>:5173`，只适合开启开发域名豁免的真机调试，不可用于体验版或正式版。
 
 ## 微信开发者工具
 

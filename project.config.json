@@ -6,7 +6,7 @@
     "es6": false,
     "postcss": false,
     "minified": false,
-    "urlCheck": true,
+    "urlCheck": false,
     "coverView": true,
     "enhance": false,
     "showShadowRootInWxmlPanel": true,

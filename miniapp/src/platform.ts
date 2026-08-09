@@ -58,6 +58,9 @@ async function miniFetch(input: string | URL, init: FetchInit = {}) {
   try {
     const response = await request;
     return new MiniResponse(response.statusCode, response.data) as unknown as Response;
+  } catch (error) {
+    console.error(`[TiGame miniapp] request failed: ${absoluteUrl(String(input))}`, error);
+    throw error;
   } finally {
     init.signal?.removeEventListener?.("abort", abort);
   }
@@ -91,7 +94,10 @@ class MiniWebSocket {
         const data = typeof event.data === "string" ? event.data : String(event.data ?? "");
         this.onmessage?.({ data });
       });
-      task.onError?.((event: unknown) => this.onerror?.(event));
+      task.onError?.((event: unknown) => {
+        console.error(`[TiGame miniapp] WebSocket failed: ${url}`, event);
+        this.onerror?.(event);
+      });
       task.onClose?.((event: { code?: number; reason?: string }) => {
         this.readyState = MiniWebSocket.CLOSED;
         this.onclose?.(event);
