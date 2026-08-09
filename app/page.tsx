@@ -1806,8 +1806,11 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmDialog, leaveGameDialog, leaveArmed, setLeaveHint]);
 
-  // “结束游戏 / 离开房间”进入待确认后，点击其它任意位置取消高亮。
+  // “结束游戏 / 离开房间”进入待确认后，网页点击其它位置取消高亮。
+  // 小程序的 plugin-html 事件目标与浏览器不同，pointerdown 可能在第二次 click 前
+  // 先把 leaveArmed 清掉，因此小程序只保留 3 秒自动过期，不挂这个全局监听。
   useEffect(() => {
+    if (getPlatformBridge()?.kind === "weapp") return;
     if (!endGameArmed && !leaveArmed) return;
     const cancelArmed = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
@@ -3776,15 +3779,19 @@ export default function Home() {
     stoppedRef.current = true;
     if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
     if (armedExpireRef.current) window.clearTimeout(armedExpireRef.current);
-    // 主动离开：等待服务器 ACK 确认后再清会话（B023/F004）。
-    if (sessionRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-      await sendCommand({ type: "leave" });
-    } else {
-      try {
-        wsRef.current?.close(1000, "bye");
-      } catch {
-        // Ignore closing errors.
-      }
+    const activeWs = wsRef.current;
+    // 主动离开会尽量等服务器 ACK，但 UI 不能被网络/close 时序卡住 8 秒。
+    // 1.2 秒足够正常链路完成确认；超时后仍立即清理本地会话。
+    if (sessionRef.current && activeWs?.readyState === WebSocket.OPEN) {
+      await Promise.race([
+        sendCommand({ type: "leave" }),
+        new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 1_200)),
+      ]);
+    }
+    try {
+      activeWs?.close(1000, "bye");
+    } catch {
+      // Ignore closing errors.
     }
     wsRef.current = null;
     socketSessionRef.current = null;

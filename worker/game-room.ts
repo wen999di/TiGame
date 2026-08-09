@@ -1265,7 +1265,7 @@ export class GameRoom {
           // 房主离开会销毁整个房间，但仍要先确认当前 leave 命令。
           // 否则客户端会一直等待 ACK，直到命令超时后才清理本地会话。
           safeSend(ws, { type: "ack", id: commandId, ok: true, revision: this.roomState.revision });
-          await this.closeRoom("房主已离开，房间已关闭");
+          await this.closeRoom("房主已离开，房间已关闭", ws);
           return;
         }
         await this.commit(ws, commandId, (state) => {
@@ -1502,8 +1502,12 @@ export class GameRoom {
     await this.ctx.storage.deleteAll();
   }
 
-  private async closeRoom(reason: string): Promise<void> {
+  private async closeRoom(reason: string, leavingSocket?: WorkerWebSocket): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) {
+      // 房主主动 leave 时，先让发起 socket 收到 ACK，再由客户端自行 close。
+      // 如果这里立即 close 同一条连接，微信真机可能在 ACK flush 前收到 close，
+      // 导致客户端一直等命令确认。其它玩家仍应立即收到房间关闭通知。
+      if (ws === leavingSocket) continue;
       safeSend(ws, { type: "kicked", reason });
       try {
         ws.close(KICKED_CLOSE_CODE, reason);

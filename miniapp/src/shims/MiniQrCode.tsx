@@ -15,7 +15,7 @@ type ModuleRun = {
   height: string;
 };
 
-const QUIET_ZONE = 4;
+const QUIET_ZONE = 0;
 
 function buildModuleRuns(value: string): ModuleRun[] {
   if (!value) return [];
