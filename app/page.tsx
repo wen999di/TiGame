@@ -4011,6 +4011,18 @@ export default function Home() {
     }
   };
 
+  const beginFreshHomeFlow = (nextScreen: "create" | "join") => {
+    // 恢复旧房间失败时，resuming 可能会随着 WebSocket 重连持续很久。
+    // 用户主动选择“创建/加入”应始终优先：终止旧恢复并清掉持久化 session，
+    // 避免旧连接稍后恢复后又把新流程强制切回大厅/游戏。
+    if (resuming || sessionRef.current || wsRef.current) terminateSession();
+    if (nextScreen === "join") {
+      setJoinStep(0);
+      setJoinStatus("idle");
+    }
+    setScreen(nextScreen);
+  };
+
   const renderHome = () => (
     <main className="site-shell home-shell" key={screen}>
       <section className="home-panel" aria-labelledby="site-title">
@@ -4021,8 +4033,8 @@ export default function Home() {
           <div className="hero-copy">
             <h1 id="site-title">TiGame</h1>
             <div className="home-actions">
-              <button className="button button-primary" onClick={() => setScreen("create")} disabled={resuming}>创建房间 <span>↗</span></button>
-              <button className="button button-secondary" onClick={() => { setJoinStep(0); setScreen("join"); }} disabled={resuming}>加入房间</button>
+              <button className="button button-primary" onClick={() => beginFreshHomeFlow("create")}>创建房间 <span>↗</span></button>
+              <button className="button button-secondary" onClick={() => beginFreshHomeFlow("join")}>加入房间</button>
             </div>
           </div>
           <div className="card-stage" aria-hidden="true">
