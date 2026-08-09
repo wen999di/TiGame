@@ -1,0 +1,284 @@
+/*
+ * WeChat Mini Program layout compatibility layer.
+ * Keep React and visual tokens shared with the web app, but replace browser
+ * layout primitives that are unreliable in WXSS with equivalent flex layouts.
+ */
+
+.miniapp-root {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  padding-top: var(--tigame-status-bar-height, 24px);
+}
+
+/* Taro's HTML normalization gives forms browser-like margins that the web app does not use. */
+.h5-form { margin: 0; }
+
+.site-shell,
+.inner-shell,
+.room-shell,
+.game-shell {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Custom navigation: stay below the status bar and clear the WeChat capsule. */
+.topbar {
+  box-sizing: border-box;
+  height: var(--tigame-nav-height, 52px);
+  min-height: var(--tigame-nav-height, 52px);
+  padding-left: var(--tigame-menu-clearance, 96px);
+  padding-right: var(--tigame-menu-clearance, 96px);
+  justify-content: center;
+}
+
+.inner-topbar,
+.room-topbar,
+.game-topbar {
+  box-sizing: border-box;
+  height: var(--tigame-nav-height, 52px);
+  min-height: var(--tigame-nav-height, 52px);
+  padding-right: var(--tigame-menu-clearance, 96px);
+}
+
+/* Home: Grid/place-items is not reliable in WXSS. */
+.home-panel {
+  width: 100%;
+  min-height: calc(100vh - var(--tigame-status-bar-height, 24px) - 40px);
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.home-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: calc(100vh - var(--tigame-status-bar-height, 24px) - var(--tigame-nav-height, 52px) - 90px);
+  gap: 0;
+}
+
+.card-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  order: -1;
+  margin-top: 12px;
+}
+
+.card-stack-image {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  max-width: 68vw;
+  max-height: 68vw;
+  flex: none;
+}
+
+.logo-fallback,
+.card-fallback,
+.brand-mark,
+.success-seal,
+.waiting-seal,
+.avatar,
+.lobby-qr-wrap,
+.join-flight-avatar,
+.qr-wrap,
+.camera-switch-button,
+.challenge-out-avatar,
+.challenge-swap-label,
+.challenge-card-join-card,
+.avatar-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-copy {
+  width: 100%;
+  padding: 18px 0 24px;
+  text-align: center;
+}
+
+.hero-copy h1,
+.hero-copy .h5-h1 {
+  margin: 8px 0 12px;
+  font-size: 48px;
+  line-height: 1;
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 320px;
+  margin: 22px auto 0;
+  gap: 10px;
+}
+
+.home-actions .button { width: 100%; }
+
+/* Create / join flows: keep the web visual language, scale it for a native phone viewport. */
+.inner-shell,
+.room-shell,
+.game-shell {
+  padding: 0 16px 24px;
+}
+
+.form-layout,
+.join-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 520px;
+  margin: 28px auto 0;
+  gap: 24px;
+}
+
+.form-intro,
+.join-copy { width: 100%; }
+
+.form-intro h1,
+.form-intro .h5-h1,
+.join-copy h1,
+.join-copy .h5-h1 {
+  margin-top: 12px;
+  font-size: 42px;
+  line-height: 1.06;
+  letter-spacing: -.045em;
+}
+
+.join-copy p,
+.join-copy .h5-p {
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.join-steps { margin-top: 20px; }
+
+.form-card,
+.join-card {
+  width: 100%;
+  min-height: 0;
+  padding: 20px;
+}
+
+.join-card { min-height: 280px; }
+.join-card > .h5-form,
+.join-card > .join-step-motion { width: 100%; }
+
+.text-input,
+.select-input {
+  width: 100%;
+  height: 48px;
+}
+
+.invite-input {
+  font-size: 18px;
+  letter-spacing: .12em;
+}
+
+.scan-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+}
+
+/* Generic one-dimensional replacements for Grid-only wrappers. */
+.manual-copy-block,
+.invite-actions,
+.join-request-list,
+.room-settings-list,
+.scope-setting > .h5-span,
+.setting-switch-label,
+.camera-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.lobby-grid,
+.lobby-side {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 18px;
+}
+
+.invite-card { order: -1; }
+
+.join-request-row,
+.room-setting,
+.mahjong-transfer-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.join-request-row .h5-strong,
+.room-setting > .h5-span,
+.mahjong-transfer-row .mahjong-adjust-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.room-setting-select { flex: 0 0 118px; }
+
+/* Equal-column grids become wrapping flex rows. */
+.field-row,
+.segmented-control,
+.scope-options,
+.result-grid,
+.mahjong-keypad-grid,
+.vote-avatars,
+.challenge-table,
+.mahjong-board,
+.game-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.field-row > * { flex: 1 1 calc(50% - 7px); min-width: 0; }
+.segmented-control > *,
+.scope-options > *,
+.mahjong-keypad-grid > * { flex: 1 1 calc(33.333% - 7px); min-width: 0; }
+.result-grid > .h5-div { flex: 1 1 calc(50% - 5px); min-width: 0; }
+.vote-avatars > * { flex: 1 1 calc(33.333% - 8px); min-width: 92px; }
+.challenge-table > * { flex: 1 1 calc(33.333% - 8px); min-width: 100px; }
+.mahjong-board > * { flex: 1 1 calc(50% - 6px); min-width: 0; }
+.game-list > * { flex: 1 1 100%; min-width: 0; }
+
+/* Three-column game topbar without CSS Grid. */
+.game-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.game-topbar-left,
+.game-topbar-right {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.game-topbar .round-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Modal centering without place-items. */
+.modal-backdrop,
+.camera-overlay,
+.confirm-overlay,
+.lost-card-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
