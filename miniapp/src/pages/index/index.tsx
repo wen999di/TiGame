@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Button, Image, Input, Text, View } from "@tarojs/components";
+import { Button, Image, Text, View } from "@tarojs/components";
 import Taro, { useShareAppMessage } from "@tarojs/taro";
 import Home from "../../../../app/page";
 import { makeAvatarThumbnail, readWechatProfile, saveWechatProfile, type WechatMiniProfile } from "../../profile";
@@ -71,48 +71,42 @@ function miniappLayoutVars(): CSSProperties {
 }
 
 function ProfileGate({ onReady }: { onReady: (profile: WechatMiniProfile) => void }) {
-  const [nickname, setNickname] = useState("");
-  const [avatarData, setAvatarData] = useState("");
-  const [avatarPreview, setAvatarPreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState("");
 
-  const chooseAvatar = async (event: { detail?: { avatarUrl?: string } }) => {
-    const path = event.detail?.avatarUrl || "";
-    if (!path) return;
+  const useWechatIdentity = async () => {
+    if (busy) return;
     setBusy(true);
     setError("");
-    setAvatarPreview(path);
     try {
-      setAvatarData(await makeAvatarThumbnail(path));
+      const result = await Taro.getUserProfile({ desc: "用于游戏中显示微信头像和昵称" });
+      const nickname = result.userInfo.nickName.trim().slice(0, 12);
+      const avatarUrl = result.userInfo.avatarUrl || "";
+      if (!nickname || !avatarUrl) throw new Error("微信没有返回昵称或头像，请重试");
+      setPreview(avatarUrl);
+      const profile = { nickname, avatarData: await makeAvatarThumbnail(avatarUrl) };
+      saveWechatProfile(profile);
+      onReady(profile);
     } catch (reason) {
-      setAvatarData("");
-      setError(reason instanceof Error ? reason.message : "头像处理失败，请重试");
+      const detail = typeof (reason as { errMsg?: unknown })?.errMsg === "string"
+        ? (reason as { errMsg: string }).errMsg
+        : reason instanceof Error ? reason.message : "微信资料获取失败，请重试";
+      setError(detail);
     } finally {
       setBusy(false);
     }
   };
 
-  const submit = () => {
-    const cleanName = nickname.trim().slice(0, 12);
-    if (!avatarData) return setError("请先选择微信头像");
-    if (!cleanName) return setError("请选择或填写昵称");
-    const profile = { nickname: cleanName, avatarData };
-    saveWechatProfile(profile);
-    onReady(profile);
-  };
-
   return <View className="wechat-profile-shell">
-    <Text className="wechat-profile-eyebrow">微信资料</Text>
+    <Text className="wechat-profile-eyebrow">微信身份</Text>
     <Text className="wechat-profile-title">进入 TiGame</Text>
-    <Text className="wechat-profile-hint">头像和昵称只用于游戏中的玩家识别。头像仅保存在本机和当前房间，不写入长期数据库。</Text>
+    <Text className="wechat-profile-hint">小程序端固定使用你的微信昵称和微信头像，TiGame 内不可自行修改。头像只保存在本机和当前房间。</Text>
     <View className="wechat-profile-card">
-      <Button className="wechat-avatar-button" openType="chooseAvatar" onChooseAvatar={chooseAvatar} disabled={busy}>
-        {avatarPreview ? <Image className="wechat-avatar-preview" src={avatarPreview} mode="aspectFill" /> : <Text>选择头像</Text>}
+      {preview ? <Image className="wechat-avatar-preview wechat-avatar-preview-standalone" src={preview} mode="aspectFill" /> : null}
+      <Button className="wechat-profile-submit" onClick={useWechatIdentity} disabled={busy}>
+        {busy ? "正在读取微信资料…" : "使用微信身份进入"}
       </Button>
-      <Text className="wechat-profile-label">昵称</Text>
-      <Input className="wechat-profile-input" type="nickname" maxlength={12} value={nickname} placeholder="点击使用微信昵称" onInput={(event) => setNickname(event.detail.value)} />
-      <Button className="wechat-profile-submit" onClick={submit} disabled={busy}>{busy ? "正在处理头像…" : "进入 TiGame"}</Button>
       {error ? <Text className="wechat-profile-error">{error}</Text> : null}
     </View>
   </View>;

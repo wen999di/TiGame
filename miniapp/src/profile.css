@@ -20,3 +20,7 @@
 .wechat-profile-submit { width: 100% !important; margin: 18px 0 0 !important; background: #e96b5f; color: #0b1726; border-radius: 14px; font-size: 16px; font-weight: 800; }
 .wechat-profile-submit::after { border: 0; }
 .wechat-profile-error { margin-top: 12px; color: #ff9c92; font-size: 13px; }
+.wechat-avatar-preview-standalone {
+  margin: 0 auto 18px;
+  border-radius: 50%;
+}

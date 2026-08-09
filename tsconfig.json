@@ -38,6 +38,9 @@
       ],
       "@tigame/form-controls": [
         "./app/platform/form-controls.tsx"
+      ],
+      "@tigame/mini-qr": [
+        "./app/platform/mini-qr.tsx"
       ]
     }
   },

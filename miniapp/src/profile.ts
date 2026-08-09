@@ -1,6 +1,6 @@
 import Taro from "@tarojs/taro";
 
-export const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v1";
+export const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v2";
 const AVATAR_DATA_MAX = 4096;
 
 export type WechatMiniProfile = {
@@ -35,7 +35,21 @@ function readFileBase64(filePath: string): Promise<string> {
   });
 }
 
+async function localAvatarPath(source: string): Promise<string> {
+  const info = await Taro.getImageInfo({ src: source }).catch(() => null);
+  if (info?.path) return info.path;
+  if (/^https?:\/\//i.test(source)) {
+    const downloaded = await Taro.downloadFile({ url: source });
+    if (downloaded.statusCode < 200 || downloaded.statusCode >= 300 || !downloaded.tempFilePath) {
+      throw new Error("微信头像下载失败，请重试");
+    }
+    return downloaded.tempFilePath;
+  }
+  return source;
+}
+
 export async function makeAvatarThumbnail(source: string): Promise<string> {
+  const localSource = await localAvatarPath(source);
   const attempts = [
     { size: 48, quality: 58 },
     { size: 36, quality: 42 },
@@ -43,7 +57,7 @@ export async function makeAvatarThumbnail(source: string): Promise<string> {
   ];
   for (const attempt of attempts) {
     const compressed = await Taro.compressImage({
-      src: source,
+      src: localSource,
       quality: attempt.quality,
       compressedWidth: attempt.size,
       compressedHeight: attempt.size,

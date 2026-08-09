@@ -334,3 +334,49 @@
   align-items: center;
   justify-content: center;
 }
+
+/* 小程序端大厅必须严格单列；不要依赖浏览器 Grid/flex shorthand 的隐式尺寸。 */
+.lobby-grid,
+.lobby-side,
+.game-list {
+  width: 100%;
+  align-items: stretch;
+}
+.lobby-grid > *,
+.lobby-side > *,
+.player-card,
+.settings-card,
+.invite-card,
+.game-picker,
+.game-card {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.game-list {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.game-list > *,
+.game-list > .game-card,
+.game-card {
+  flex: none;
+  width: 100%;
+}
+.game-card-action,
+.game-card-enter {
+  width: 100%;
+  box-sizing: border-box;
+}
+.miniapp-profile-lock {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 16px;
+  border: 1px solid rgba(245, 235, 221, 0.2);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.14);
+}
+.miniapp-profile-lock span { color: #a9b8c9; font-size: 12px; }
+.miniapp-profile-lock strong { color: #f5ebdd; font-size: 17px; }

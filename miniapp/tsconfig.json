@@ -41,6 +41,9 @@
       ],
       "@tigame/form-controls": [
         "src/shims/form-controls.tsx"
+      ],
+      "@tigame/mini-qr": [
+        "src/shims/MiniQrCode.tsx"
       ]
     }
   },

@@ -26,6 +26,7 @@ export default defineConfig({
     "motion/react": path.resolve(MINIAPP_ROOT, "src/shims/motion.tsx"),
     "@tigame/portal": path.resolve(MINIAPP_ROOT, "src/shims/react-dom.tsx"),
     "@tigame/form-controls": path.resolve(MINIAPP_ROOT, "src/shims/form-controls.tsx"),
+    "@tigame/mini-qr": path.resolve(MINIAPP_ROOT, "src/shims/MiniQrCode.tsx"),
     "@tigame/mahjong-history": path.resolve(MINIAPP_ROOT, "src/shims/MahjongHistory.tsx"),
     "@tigame/mahjong-send-trace": path.resolve(MINIAPP_ROOT, "src/shims/MahjongSendTrace.tsx"),
   },

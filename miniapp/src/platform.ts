@@ -4,6 +4,10 @@ import { document as taroDocument, navigator as taroNavigator, window as taroWin
 import { readWechatProfile } from "./profile";
 
 declare const __TIGAME_API_BASE__: string;
+declare const __TIGAME_MINIAPP_DEBUG__: boolean;
+declare const wx: {
+  connectSocket?: (options: { url: string; tcpNoDelay?: boolean }) => any;
+};
 
 type FetchInit = {
   method?: string;
@@ -134,11 +138,27 @@ class MiniWebSocket {
   private task: any = null;
 
   constructor(url: string) {
-    const connected = Taro.connectSocket({ url }) as any;
+    console.info(`[TiGame miniapp] WebSocket connecting: ${url}`);
+    let openTimer: ReturnType<typeof setTimeout> | undefined;
+    const debugNotice = (title: string, detail: unknown) => {
+      if (!__TIGAME_MINIAPP_DEBUG__) return;
+      const message = typeof (detail as any)?.errMsg === "string"
+        ? (detail as any).errMsg
+        : typeof (detail as any)?.reason === "string" && (detail as any).reason
+          ? (detail as any).reason
+          : String(detail ?? "unknown");
+      void Taro.showModal({ title, content: `${url.replace(/\?.*$/, "")}\n${message}`.slice(0, 500), showCancel: false });
+    };
     const bind = (task: any) => {
+      if (!task || typeof task.onOpen !== "function") throw new Error("微信没有返回 SocketTask");
       this.task = task;
+      openTimer = setTimeout(() => {
+        if (this.readyState !== MiniWebSocket.OPEN) debugNotice("WebSocket 连接超时", "8 秒内未收到 onOpen");
+      }, 8_000);
       task.onOpen?.((event: unknown) => {
+        if (openTimer) clearTimeout(openTimer);
         this.readyState = MiniWebSocket.OPEN;
+        console.info(`[TiGame miniapp] WebSocket open: ${url}`);
         this.onopen?.(event);
       });
       task.onMessage?.((event: { data: unknown }) => {
@@ -146,20 +166,43 @@ class MiniWebSocket {
         this.onmessage?.({ data });
       });
       task.onError?.((event: unknown) => {
+        if (openTimer) clearTimeout(openTimer);
         console.error(`[TiGame miniapp] WebSocket failed: ${url}`, event);
+        debugNotice("WebSocket 连接失败", event);
         this.onerror?.(event);
       });
       task.onClose?.((event: { code?: number; reason?: string }) => {
+        if (openTimer) clearTimeout(openTimer);
         this.readyState = MiniWebSocket.CLOSED;
+        console.info(`[TiGame miniapp] WebSocket closed: ${url}`, event);
         this.onclose?.(event);
       });
     };
-    if (connected && typeof connected.onOpen === "function") bind(connected);
-    else Promise.resolve(connected).then(bind).catch((error) => {
+
+    try {
+      // Taro 4 会把 connectSocket Promise 化；直接拿微信原生 SocketTask，
+      // 在 connectSocket 返回的同一轮同步绑定 onOpen/onMessage，避免错过早期事件。
+      const nativeTask = typeof wx !== "undefined"
+        ? wx.connectSocket?.({ url, tcpNoDelay: true })
+        : undefined;
+      if (nativeTask && typeof nativeTask.onOpen === "function") {
+        bind(nativeTask);
+        return;
+      }
+      const connected = Taro.connectSocket({ url }) as any;
+      if (connected && typeof connected.onOpen === "function") bind(connected);
+      else Promise.resolve(connected).then(bind).catch((error) => {
+        this.readyState = MiniWebSocket.CLOSED;
+        debugNotice("WebSocket 创建失败", error);
+        this.onerror?.(error);
+        this.onclose?.({ reason: "connect failed" });
+      });
+    } catch (error) {
       this.readyState = MiniWebSocket.CLOSED;
+      debugNotice("WebSocket 创建失败", error);
       this.onerror?.(error);
       this.onclose?.({ reason: "connect failed" });
-    });
+    }
   }
 
   send(data: string) {

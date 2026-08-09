@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { createPortal } from "@tigame/portal";
 import { ActionButton, ActionForm } from "@tigame/form-controls";
+import { MiniQrCode } from "@tigame/mini-qr";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
@@ -3895,8 +3896,9 @@ export default function Home() {
   const createRoom = async () => {
     if (creatingRoom) return;
     const trimmedName = form.name.trim();
-    const playerName = trimmedName || "房主";
-    if (trimmedName) storeNickname(trimmedName);
+    const platformName = platformProfile?.nickname?.trim().slice(0, 12) || "";
+    const playerName = platformName || trimmedName || "房主";
+    if (!platformName && trimmedName) storeNickname(trimmedName);
     setCreatingRoom(true);
     try {
       // 房间号 409 碰撞时自动重试 2 次（B046）。
@@ -3982,8 +3984,9 @@ export default function Home() {
   const requestToJoin = async () => {
     const roomId = normalizeRoomId(joinCode);
     const trimmedName = joinName.trim();
-    const playerName = trimmedName || "新玩家";
-    if (trimmedName) storeNickname(trimmedName);
+    const platformName = platformProfile?.nickname?.trim().slice(0, 12) || "";
+    const playerName = platformName || trimmedName || "新玩家";
+    if (!platformName && trimmedName) storeNickname(trimmedName);
     setJoinStatus("submitting");
     try {
       // 若本机已有同一房间的会话（例如掉线后凭证仍在但走了加入流程），
@@ -4084,8 +4087,12 @@ export default function Home() {
       <section className="form-layout">
         <div className="form-intro"><span className="eyebrow">准备开局</span><h1>先把房间<br /><em>开起来</em></h1></div>
         <ActionForm className="glass-card form-card" onSubmit={handleCreate}>
-          <label className="field-label" htmlFor="host-name">你的昵称</label>
-          <input id="host-name" className="text-input" value={form.name} onChange={(event) => setForm({ name: event.target.value })} maxLength={12} autoFocus />
+          {getPlatformBridge()?.kind === "weapp" ? (
+            <div className="miniapp-profile-lock"><span>微信昵称</span><strong>{platformProfile?.nickname || "微信用户"}</strong></div>
+          ) : (<>
+            <label className="field-label" htmlFor="host-name">你的昵称</label>
+            <input id="host-name" className="text-input" value={form.name} onChange={(event) => setForm({ name: event.target.value })} maxLength={12} autoFocus />
+          </>)}
           
           <ActionButton
             className="button button-primary form-submit"
@@ -4120,9 +4127,13 @@ export default function Home() {
             >{checkingJoin ? "正在校验…" : "继续"} {!checkingJoin && <span>→</span>}</ActionButton>
           </ActionForm>}
           {joinStep === 1 && <div className="join-confirm">
-            <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>输入你的昵称</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
-            <label className="field-label" htmlFor="join-name">昵称</label>
-            <input id="join-name" className="text-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} maxLength={12} autoFocus />
+            <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>{getPlatformBridge()?.kind === "weapp" ? "确认微信身份" : "输入你的昵称"}</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
+            {getPlatformBridge()?.kind === "weapp" ? (
+              <div className="miniapp-profile-lock"><span>微信昵称</span><strong>{platformProfile?.nickname || "微信用户"}</strong></div>
+            ) : (<>
+              <label className="field-label" htmlFor="join-name">昵称</label>
+              <input id="join-name" className="text-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} maxLength={12} autoFocus />
+            </>)}
             <button className="button button-primary form-submit" type="button" onClick={requestToJoin} disabled={joinStatus === "submitting"}>{joinStatus === "submitting" ? "正在发送…" : "申请加入"} <span>→</span></button>
           </div>}
           {joinStep === 2 && <div className="join-confirm response-confirm">
@@ -4313,7 +4324,7 @@ export default function Home() {
         <aside className="lobby-side">
           <div className="glass-card invite-card">
             <div className="card-header"><div><span className="section-kicker">邀请玩家</span><h2>扫码加入</h2></div><span className="invite-symbol">⌗</span></div>
-            <div className="lobby-qr-wrap">{getPlatformBridge()?.kind === "weapp" ? <div className="miniapp-share-hint">点击右上角分享房间</div> : <canvas ref={setQrCanvas} className="lobby-qr-canvas" aria-label="房间邀请二维码" />}</div><p className="lobby-room-code">{room.roomId}</p>
+            <div className="lobby-qr-wrap">{getPlatformBridge()?.kind === "weapp" ? <MiniQrCode value={inviteUrl} className="lobby-qr-canvas" /> : <canvas ref={setQrCanvas} className="lobby-qr-canvas" aria-label="房间邀请二维码" />}</div><p className="lobby-room-code">{room.roomId}</p>
             <div className="invite-actions">{copyFailed ? <div className="manual-copy-block"><input className="manual-copy-input" readOnly value={inviteUrl} aria-label="房间邀请链接" onFocus={(event) => event.currentTarget.select()} onPointerUp={(event) => event.currentTarget.select()} /><p className="manual-copy-hint">自动复制失败：请长按或点选上方链接，复制后发给好友</p><button className="copy-link compact-link retry-copy" onClick={copyInvite}>重新自动复制</button></div> : <button className="copy-link compact-link" onClick={copyInvite}>{copied ? "✓ 已复制" : "复制邀请链接"}</button>}
               {(isHost && (room.pendingJoinRequests.length > 0 || leavingRequests.length > 0)) && <div className="join-request-list"><span>加入申请</span>{pendingAndLeavingRequests.pending.map((request, index) => renderJoinRequestRow(request, index, false))}{pendingAndLeavingRequests.leaving.map((item, index) => renderJoinRequestRow(item, index + pendingAndLeavingRequests.pending.length, true))}</div>}
             </div>
