@@ -11,6 +11,8 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const OUTPUT_ROOT = path.join(REPO_ROOT, "dist", "miniapp");
 const APP_CONFIG = path.join(OUTPUT_ROOT, "app.json");
 const OPEN_SCRIPT = path.join(SCRIPT_DIR, "open-wechat-devtools.mjs");
+const NETWORK_CHECK_SCRIPT = path.join(SCRIPT_DIR, "check-miniapp-network.mjs");
+const CLOUD_API_BASE = "https://tigame.cavendish.dpdns.org";
 
 async function exists(filePath) {
   try { await access(filePath); return true; } catch { return false; }
@@ -45,13 +47,28 @@ async function waitForBuild(child) {
   throw new Error(`Timed out waiting for Taro output: ${APP_CONFIG}`);
 }
 
-async function openDevTools() {
-  const child = spawn(process.execPath, [OPEN_SCRIPT], { cwd: REPO_ROOT, stdio: "inherit" });
+function cloudEnv() {
+  return {
+    ...process.env,
+    TIGAME_MINIAPP_API_BASE: CLOUD_API_BASE,
+  };
+}
+
+async function runNodeScript(scriptPath, label, options = {}) {
+  const child = spawn(process.execPath, [scriptPath], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+    ...options,
+  });
   const code = await new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (exitCode) => resolve(exitCode ?? 1));
   });
-  if (code !== 0) throw new Error(`WeChat DevTools launcher exited with code ${code}.`);
+  if (code !== 0) throw new Error(`${label} exited with code ${code}.`);
+}
+
+async function openDevTools() {
+  await runNodeScript(OPEN_SCRIPT, "WeChat DevTools launcher");
 }
 
 async function main() {
@@ -60,8 +77,8 @@ async function main() {
   }
 
   await rm(OUTPUT_ROOT, { recursive: true, force: true });
-  console.log("Starting Taro 4 WeChat Mini Program watch build...");
-  const watcher = spawnPnpm(["--filter", "@tigame/miniapp", "dev:weapp"]);
+  console.log(`Starting Taro 4 WeChat Mini Program watch build against ${CLOUD_API_BASE}...`);
+  const watcher = spawnPnpm(["--filter", "@tigame/miniapp", "dev:weapp"], { env: cloudEnv() });
   let stopping = false;
   const stop = () => {
     if (stopping) return;
@@ -74,6 +91,7 @@ async function main() {
   try {
     await waitForBuild(watcher);
     console.log(`Taro output ready: ${OUTPUT_ROOT}`);
+    await runNodeScript(NETWORK_CHECK_SCRIPT, "Mini Program network check", { env: cloudEnv() });
     await openDevTools();
     console.log("Taro watch is active; edits to shared app/ React code will rebuild the Mini Program.");
     const code = await new Promise((resolve) => watcher.once("exit", (exitCode) => resolve(exitCode ?? 0)));
