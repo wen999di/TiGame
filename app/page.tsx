@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, us
 import { createPortal } from "@tigame/portal";
 import { ActionButton, ActionForm } from "@tigame/form-controls";
 import { MiniQrCode } from "@tigame/mini-qr";
+import { MiniProfileEditor } from "@tigame/mini-profile";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
@@ -43,7 +44,6 @@ type TiGamePlatformBridge = {
   webBase?: string;
   getInviteCode?: () => string;
   getUserProfile?: () => TiGameUserProfile | null;
-  ensureUserProfile?: () => Promise<TiGameUserProfile | null>;
   connectWebSocket?: (url: string) => WebSocket;
   clearInviteCode?: () => void;
   scanCode?: () => Promise<string>;
@@ -3938,30 +3938,34 @@ export default function Home() {
     }
   };
 
+  const handleMiniProfileChange = useCallback((profile: TiGameUserProfile | null) => {
+    setPlatformProfile(profile);
+    const nickname = profile?.nickname?.trim().slice(0, 12) || "";
+    if (nickname) {
+      setForm({ name: nickname });
+      setJoinName(nickname);
+    }
+  }, []);
+
   const ensurePlatformProfile = async (): Promise<TiGameUserProfile | null> => {
     const bridge = getPlatformBridge();
     if (bridge?.kind !== "weapp") return platformProfile;
-    const cached = bridge.getUserProfile?.() ?? platformProfile;
-    if (cached?.nickname) {
-      if (cached !== platformProfile) setPlatformProfile(cached);
-      setForm({ name: cached.nickname });
-      setJoinName(cached.nickname);
-      return cached;
-    }
-    try {
-      const profile = await bridge.ensureUserProfile?.();
-      if (!profile?.nickname) throw new Error("未能获取微信昵称和头像");
-      setPlatformProfile(profile);
-      setForm({ name: profile.nickname });
-      setJoinName(profile.nickname);
-      return profile;
-    } catch (error) {
-      const detail = typeof (error as { errMsg?: unknown })?.errMsg === "string"
-        ? (error as { errMsg: string }).errMsg
-        : error instanceof Error ? error.message : "微信资料获取失败";
-      setNotice(detail);
+    const candidate = platformProfile ?? bridge.getUserProfile?.() ?? null;
+    const nickname = candidate?.nickname?.trim().slice(0, 12) || "";
+    const avatarData = candidate?.avatarData || "";
+    if (!avatarData) {
+      setNotice("请先点击头像，选择微信头像");
       return null;
     }
+    if (!nickname) {
+      setNotice("请点击昵称输入框，选择或填写微信昵称");
+      return null;
+    }
+    const profile = { nickname, avatarData };
+    if (candidate !== platformProfile) setPlatformProfile(profile);
+    setForm({ name: nickname });
+    setJoinName(nickname);
+    return profile;
   };
 
   const createRoom = async () => {
@@ -4121,10 +4125,9 @@ export default function Home() {
     }
   };
 
-  const beginFreshHomeFlow = async (nextScreen: "create" | "join") => {
-    // 小程序直接在用户点击“创建/加入”这一手势里请求微信资料；
-    // 微信自身负责授权弹窗，不再显示 TiGame 的独立身份入口页。
-    if (getPlatformBridge()?.kind === "weapp" && !(await ensurePlatformProfile())) return;
+  const beginFreshHomeFlow = (nextScreen: "create" | "join") => {
+    // 小程序直接进入当前创建/加入页面，在昵称区域使用微信原生头像与昵称填写能力；
+    // 不再调用旧 getUserProfile，也不会在进入页面前弹额外授权。
     // 恢复旧房间失败时，resuming 可能会随着 WebSocket 重连持续很久。
     // 用户主动选择“创建/加入”应始终优先：终止旧恢复并清掉持久化 session，
     // 避免旧连接稍后恢复后又把新流程强制切回大厅/游戏。
@@ -4168,7 +4171,7 @@ export default function Home() {
         <div className="form-intro"><span className="eyebrow">准备开局</span><h1>先把房间<br /><em>开起来</em></h1></div>
         <ActionForm className="glass-card form-card" onSubmit={handleCreate}>
           {getPlatformBridge()?.kind === "weapp" ? (
-            <div className="miniapp-profile-lock"><span>微信昵称</span><strong>{platformProfile?.nickname || "微信用户"}</strong></div>
+            <MiniProfileEditor profile={platformProfile} onProfileChange={handleMiniProfileChange} />
           ) : (<>
             <label className="field-label" htmlFor="host-name">你的昵称</label>
             <input id="host-name" className="text-input" value={form.name} onChange={(event) => setForm({ name: event.target.value })} maxLength={12} autoFocus />
@@ -4209,7 +4212,7 @@ export default function Home() {
           {joinStep === 1 && <div className="join-confirm">
             <span className="success-seal">✓</span><span className="eyebrow">已读取邀请</span><h2>{getPlatformBridge()?.kind === "weapp" ? "确认加入" : "输入你的昵称"}</h2><p>邀请来自房间 <strong>{joinCode || "—"}</strong></p>
             {getPlatformBridge()?.kind === "weapp" ? (
-              <div className="miniapp-profile-lock"><span>微信昵称</span><strong>{platformProfile?.nickname || "微信用户"}</strong></div>
+              <MiniProfileEditor profile={platformProfile} onProfileChange={handleMiniProfileChange} />
             ) : (<>
               <label className="field-label" htmlFor="join-name">昵称</label>
               <input id="join-name" className="text-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} maxLength={12} autoFocus />

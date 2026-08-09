@@ -369,17 +369,68 @@
   width: 100%;
   box-sizing: border-box;
 }
-.miniapp-profile-lock {
+.miniapp-profile-editor {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 14px 16px;
-  border: 1px solid rgba(245, 235, 221, 0.2);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.14);
+  gap: 18px;
+  width: 100%;
 }
-.miniapp-profile-lock span { color: #a9b8c9; font-size: 12px; }
-.miniapp-profile-lock strong { color: #f5ebdd; font-size: 17px; }
+.miniapp-avatar-field,
+.miniapp-nickname-field {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+}
+.miniapp-avatar-field { align-items: center; }
+.miniapp-profile-label {
+  width: 100%;
+  color: #a9b8c9;
+  font-size: 12px;
+}
+.miniapp-avatar-button {
+  width: 82px;
+  height: 82px;
+  min-width: 82px;
+  padding: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(245, 235, 221, 0.28);
+  border-radius: 50%;
+  background: rgba(5, 15, 26, 0.42);
+  line-height: normal;
+}
+.miniapp-avatar-button::after { border: 0; }
+.miniapp-avatar-button.has-avatar { border-color: rgba(233, 107, 95, 0.72); }
+.miniapp-avatar-image,
+.miniapp-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+}
+.miniapp-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e96b5f;
+  font-size: 30px;
+}
+.miniapp-profile-help {
+  color: #7f95aa;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.miniapp-avatar-field .miniapp-profile-help { text-align: center; }
+.miniapp-nickname-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(245, 235, 221, 0.24);
+  border-radius: 10px;
+  background: rgba(5, 15, 26, 0.36);
+  color: #f5ebdd;
+  font-size: 16px;
+}
 
 /* 断线/恢复提示放在沉浸式状态栏和胶囊导航区域下方；不改变页面本身的沉浸式顶栏。 */
 .connection-recovery-banner,

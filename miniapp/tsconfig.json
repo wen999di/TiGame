@@ -44,6 +44,9 @@
       ],
       "@tigame/mini-qr": [
         "src/shims/MiniQrCode.tsx"
+      ],
+      "@tigame/mini-profile": [
+        "src/shims/MiniProfileEditor.tsx"
       ]
     }
   },

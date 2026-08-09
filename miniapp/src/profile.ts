@@ -8,32 +8,34 @@ export type WechatMiniProfile = {
   avatarData: string;
 };
 
-export function readWechatProfile(): WechatMiniProfile | null {
+export function readWechatProfileDraft(): Partial<WechatMiniProfile> {
   try {
     const value = Taro.getStorageSync(WECHAT_PROFILE_STORAGE_KEY) as Partial<WechatMiniProfile> | string | undefined;
     const parsed = typeof value === "string" ? JSON.parse(value) as Partial<WechatMiniProfile> : value;
     const nickname = typeof parsed?.nickname === "string" ? parsed.nickname.trim().slice(0, 12) : "";
     const avatarData = typeof parsed?.avatarData === "string" ? parsed.avatarData : "";
-    return nickname && avatarData ? { nickname, avatarData } : null;
+    return { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
   } catch {
-    return null;
+    return {};
   }
 }
 
-export function saveWechatProfile(profile: WechatMiniProfile) {
-  Taro.setStorageSync(WECHAT_PROFILE_STORAGE_KEY, profile);
+export function readWechatProfile(): WechatMiniProfile | null {
+  const draft = readWechatProfileDraft();
+  return draft.nickname && draft.avatarData
+    ? { nickname: draft.nickname, avatarData: draft.avatarData }
+    : null;
 }
 
-export async function requestWechatProfile(): Promise<WechatMiniProfile> {
-  const cached = readWechatProfile();
-  if (cached) return cached;
-  const result = await Taro.getUserProfile({ desc: "用于游戏中显示微信头像和昵称" });
-  const nickname = result.userInfo.nickName.trim().slice(0, 12);
-  const avatarUrl = result.userInfo.avatarUrl || "";
-  if (!nickname || !avatarUrl) throw new Error("微信没有返回昵称或头像，请重试");
-  const profile = { nickname, avatarData: await makeAvatarThumbnail(avatarUrl) };
-  saveWechatProfile(profile);
-  return profile;
+export function saveWechatProfileDraft(changes: Partial<WechatMiniProfile>): Partial<WechatMiniProfile> {
+  const current = readWechatProfileDraft();
+  const nicknameSource = changes.nickname === undefined ? current.nickname : changes.nickname;
+  const avatarSource = changes.avatarData === undefined ? current.avatarData : changes.avatarData;
+  const nickname = typeof nicknameSource === "string" ? nicknameSource.trim().slice(0, 12) : "";
+  const avatarData = typeof avatarSource === "string" ? avatarSource : "";
+  const next = { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
+  Taro.setStorageSync(WECHAT_PROFILE_STORAGE_KEY, next);
+  return next;
 }
 
 function readFileBase64(filePath: string): Promise<string> {

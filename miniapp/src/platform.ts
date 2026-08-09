@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic BOM/Taro compatibility bridge */
 import Taro from "@tarojs/taro";
 import { document as taroDocument, navigator as taroNavigator, window as taroWindow } from "@tarojs/runtime";
-import { readWechatProfile, requestWechatProfile } from "./profile";
+import { readWechatProfile } from "./profile";
 
 declare const __TIGAME_API_BASE__: string;
 declare const wx: {
@@ -333,7 +333,6 @@ root.__TIGAME_PLATFORM__ = {
   webBase: apiBase,
   getInviteCode: currentInviteCode,
   getUserProfile: readWechatProfile,
-  ensureUserProfile: requestWechatProfile,
   connectWebSocket: (url: string) => new MiniWebSocket(url) as unknown as WebSocket,
   clearInviteCode() {},
   async scanCode() {

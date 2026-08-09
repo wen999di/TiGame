@@ -41,6 +41,9 @@
       ],
       "@tigame/mini-qr": [
         "./app/platform/mini-qr.tsx"
+      ],
+      "@tigame/mini-profile": [
+        "./app/platform/mini-profile.tsx"
       ]
     }
   },
