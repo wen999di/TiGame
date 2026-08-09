@@ -12,6 +12,41 @@
   padding-top: var(--tigame-status-bar-height, 24px);
 }
 
+/* Taro/WeChat buttons retain native Mini Program defaults unless explicitly reset. */
+.h5-button {
+  margin: 0;
+  line-height: normal;
+  background-color: transparent;
+  color: inherit;
+}
+
+.h5-button::after { border: 0; }
+
+/* Use literal colors as a fallback even if a client does not inherit CSS variables. */
+.button-primary {
+  background: #e96b5f;
+  color: #fff8ef;
+  border: 0;
+}
+
+.button-primary:hover:not(:disabled),
+.button-primary:active:not(:disabled) {
+  background: #ef796e;
+  color: #fff8ef;
+}
+
+.button-secondary {
+  background: rgba(8, 22, 37, 0.32);
+  color: #f5ebdd;
+  border: 1px solid rgba(245, 235, 221, 0.72);
+}
+
+.button-secondary:hover:not(:disabled),
+.button-secondary:active:not(:disabled) {
+  background: rgba(245, 235, 221, 0.1);
+  color: #f5ebdd;
+}
+
 /* Taro's HTML normalization gives forms browser-like margins that the web app does not use. */
 .h5-form { margin: 0; }
 
@@ -41,6 +76,15 @@
   height: var(--tigame-nav-height, 52px);
   min-height: var(--tigame-nav-height, 52px);
   padding-right: var(--tigame-menu-clearance, 96px);
+}
+
+.inner-topbar .back-button,
+.room-topbar .back-button,
+.game-topbar .back-button {
+  width: auto;
+  margin: 0;
+  flex: none;
+  align-self: center;
 }
 
 /* Home: Grid/place-items is not reliable in WXSS. */

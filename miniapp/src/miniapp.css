@@ -5,6 +5,24 @@ page {
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
+/* The web palette lives on :root, which has no matching node in Mini Program WXSS. */
+page, .miniapp-root {
+  --night: #0b1726;
+  --night-2: #10243a;
+  --ink: #102033;
+  --paper: #f5ebdd;
+  --paper-deep: #ead9c4;
+  --coral: #e96b5f;
+  --coral-dark: #c9544c;
+  --muted: #a9b8c9;
+  --line: rgba(216, 224, 232, 0.18);
+  --line-bright: rgba(245, 235, 221, 0.56);
+  --sage: #a6c0a2;
+  --gold: #d9ad67;
+  --blue: #89aec9;
+  --shadow: rgba(4, 9, 16, 0.42);
+}
+
 /*
  * @tarojs/plugin-html 会把 HTML 标签映射为 h5-* 类，同时不保留网页端的
  * 通配符 box-sizing 重置。这里显式恢复网页端的 border-box 盒模型，避免
