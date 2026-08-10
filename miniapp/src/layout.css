@@ -438,6 +438,15 @@
   top: calc(var(--tigame-status-bar-height, 24px) + var(--tigame-nav-height, 52px) + 8px);
 }
 
+/* The animated screen wrapper is normally allowed to grow for long pages.
+ * Home is the only screen that must fit exactly inside the visible Mini Program viewport;
+ * subtract the custom status-bar inset so its wrapper cannot create a phantom scroll range. */
+.screen-motion-home {
+  height: calc(100vh - var(--tigame-status-bar-height, 24px));
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Mini Program home: match the web badge while fitting exactly inside the viewport. */
 .home-shell {
   height: calc(100vh - var(--tigame-status-bar-height, 24px));

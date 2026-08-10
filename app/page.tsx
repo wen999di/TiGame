@@ -5262,7 +5262,7 @@ export default function Home() {
         <AnimatePresence mode="wait" initial={false}>
           <m.div
             key={`${screen}-${gamePhaseKey}`}
-            className="screen-motion"
+            className={`screen-motion screen-motion-${screen}`}
             initial={{ opacity: 0, y: 14, scale: 0.995 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.995 }}
