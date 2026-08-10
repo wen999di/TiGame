@@ -1,6 +1,9 @@
+import type { AvatarMime } from "../game/avatar-frame";
+
 type MiniProfile = {
   nickname: string;
-  avatarData?: string;
+  avatarPath?: string;
+  avatarMime?: AvatarMime;
 };
 
 type MiniProfileEditorProps = {

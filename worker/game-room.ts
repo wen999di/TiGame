@@ -1,5 +1,10 @@
 import { ROOM_ID_PATTERN, normalizeRoomId } from "../app/game/room-id.ts";
 import {
+  decodeAvatarUploadFrame,
+  encodeAvatarDeliveryFrame,
+  type AvatarMime,
+} from "../app/game/avatar-frame.ts";
+import {
   GAME_LIST,
   ROOM_MAX_PLAYERS,
   addPendingRequest,
@@ -74,7 +79,10 @@ type WsAttachment = {
   connectedAt: number;
   commandWindowStartedAt: number;
   commandCount: number;
+  avatarUpdatedAt?: number;
 };
+
+type StoredAvatar = { mime: AvatarMime; bytes: ArrayBuffer };
 
 type TokenKind = "host" | "join-request" | "member";
 
@@ -122,6 +130,7 @@ type DurableObjectContext = {
     get<T>(key: string): Promise<T | undefined>;
     put(key: string, value: unknown): Promise<void>;
     delete(key: string): Promise<void>;
+    deleteAll(): Promise<void>;
     setAlarm(time: number): Promise<void>;
     getAlarm(): Promise<number | null>;
     deleteAlarm(): Promise<void>;
@@ -144,6 +153,14 @@ function safeSend(ws: WorkerWebSocket, data: unknown) {
   }
 }
 
+function safeSendBinary(ws: WorkerWebSocket, data: ArrayBuffer) {
+  try {
+    ws.send(data);
+  } catch {
+    // The connection may already be closing; avatar replay can wait for reconnect.
+  }
+}
+
 /** 昵称查重比较键：Unicode 规范化 + 去首尾空格 + 小写（B047）。 */
 function nameCompareKey(name: string): string {
   try {
@@ -153,16 +170,31 @@ function nameCompareKey(name: string): string {
   }
 }
 
-/** 微信头像只作为房间内展示用的缩略图。客户端会先压缩到约 64–96px；
- * 服务端再次做协议/长度校验，避免把任意超大 data URL 塞进 Durable Object 快照。 */
-function sanitizeAvatarData(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0 || value.length > 8_192) return undefined;
-  if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(value)) return undefined;
-  return value;
-}
-
 function sameStringList(left: readonly string[], right: readonly string[]) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+/** 旧房间若还带 Base64 avatarData，加载时立即从内存投影中剥离，后续持久化自然清掉。 */
+function stripLegacyAvatarData(room: RoomState | null): RoomState | null {
+  if (!room) return room;
+  let changed = false;
+  const players = room.players.map((player) => {
+    const legacy = player as Player & { avatarData?: unknown };
+    if (!("avatarData" in legacy)) return player;
+    const { avatarData: _avatarData, ...clean } = legacy;
+    void _avatarData;
+    changed = true;
+    return clean as Player;
+  });
+  const pendingJoinRequests = room.pendingJoinRequests.map((request) => {
+    const legacy = request as PendingJoinRequest & { avatarData?: unknown };
+    if (!("avatarData" in legacy)) return request;
+    const { avatarData: _avatarData, ...clean } = legacy;
+    void _avatarData;
+    changed = true;
+    return clean as PendingJoinRequest;
+  });
+  return changed ? { ...room, players, pendingJoinRequests } : room;
 }
 
 /** 迁移旧版“谁是卧底”设置：词库范围由单个 difficulty 数字改为 scopes 数组。 */
@@ -219,6 +251,7 @@ export class GameRoom {
     }
     const data = await this.ctx.storage.get<PersistedData>("data");
     this.roomState = data?.room ?? null;
+    this.roomState = stripLegacyAvatarData(this.roomState);
     this.roomState = migrateLegacyUndercoverSettings(this.roomState);
     // 旧房间快照可能缺少“向所有人收取”相关字段，加载时补齐默认值。
     if (this.roomState?.gameId === "mahjong" && this.roomState.gameState) {
@@ -311,7 +344,6 @@ export class GameRoom {
       roomId?: string;
       hostName?: string;
       settings?: Partial<RoomSettings>;
-      hostAvatarData?: string;
     } | null;
     const roomId = normalizeRoomId(payload?.roomId);
     if (!ROOM_ID_PATTERN.test(roomId) || !payload) {
@@ -326,7 +358,7 @@ export class GameRoom {
       if (existing) return;
       const hostId = crypto.randomUUID();
       const token = crypto.randomUUID();
-      this.roomState = createRoomState(roomId, hostId, hostName, settings, sanitizeAvatarData(payload.hostAvatarData));
+      this.roomState = createRoomState(roomId, hostId, hostName, settings);
       this.syncAllOfflineState();
       this.tokens = {
         [hostId]: [{ token, kind: "host", issuedAt: Date.now(), expiresAt: null }],
@@ -349,7 +381,6 @@ export class GameRoom {
     const payload = (await request.json().catch(() => null)) as {
       roomId?: string;
       playerName?: string;
-      avatarData?: string;
       resumePlayerId?: string;
       resumeToken?: string;
     } | null;
@@ -391,11 +422,9 @@ export class GameRoom {
     }
     const playerId = crypto.randomUUID();
     const token = crypto.randomUUID();
-    const avatarData = sanitizeAvatarData(payload.avatarData);
     const requestEntry: PendingJoinRequest = {
       id: playerId,
       playerName,
-      ...(avatarData ? { avatarData } : {}),
       createdAt: Date.now(),
     };
     this.roomState = {
@@ -560,6 +589,8 @@ export class GameRoom {
       });
       // N005：挑战弃牌揭示在断线/重连后重放（私密事件，带稳定 eventId）。
       this.resendChallengeReveal(server, playerId);
+      // 头像不进入 room JSON；重连时按当前查看权限用二进制帧单独重放。
+      await this.sendVisibleAvatars(server, attachment);
       // 目标玩家只收到一次状态（hello 已含 room），广播排除自己（B027）。
       this.broadcastRoom(undefined, playerId);
     } else {
@@ -572,6 +603,10 @@ export class GameRoom {
   async webSocketMessage(ws: WorkerWebSocket, message: string | ArrayBuffer) {
     const attachment = ws.deserializeAttachment<WsAttachment>();
     if (!attachment) return;
+    if (message instanceof ArrayBuffer) {
+      await this.handleAvatarMessage(ws, attachment, message);
+      return;
+    }
     if (typeof message !== "string" || new TextEncoder().encode(message).length > MAX_MESSAGE_BYTES) return;
     let payload: Record<string, unknown>;
     try {
@@ -1183,7 +1218,19 @@ export class GameRoom {
             token: issuedToken,
           });
           this.resendChallengeReveal(targetSocket, targetId);
+          await this.sendVisibleAvatars(targetSocket, {
+            ...(previousAttachment ?? {
+              playerId: targetId,
+              pending: false,
+              connectedAt: Date.now(),
+              commandWindowStartedAt: Date.now(),
+              commandCount: 0,
+            }),
+            pending: false,
+          });
         }
+        // 申请阶段头像只给房主；批准后才把该玩家头像发给所有正式成员。
+        await this.broadcastStoredAvatar(targetId, targetSocket ?? undefined);
         // ACK 在凭证落盘与目标 attachment 更新之后返回。
         safeSend(ws, { type: "ack", id: commandId, ok: true, revision: this.roomState.revision });
         return;
@@ -1207,6 +1254,7 @@ export class GameRoom {
         });
         if (rejected) {
           delete this.tokens[targetId];
+          await this.deleteAvatar(targetId);
           await this.persist();
           const targetSocket = this.socketForPlayer(targetId, true);
           if (targetSocket) {
@@ -1245,6 +1293,7 @@ export class GameRoom {
         if (removedPlayer) {
           this.syncAllOfflineState();
           delete this.tokens[targetId];
+          await this.deleteAvatar(targetId);
           await this.persist();
           // 踢出时关闭该玩家全部连接（B011）。
           for (const targetSocket of this.ctx.getWebSockets(`player:${targetId}`)) {
@@ -1275,6 +1324,7 @@ export class GameRoom {
         });
         this.syncAllOfflineState();
         delete this.tokens[playerId];
+        await this.deleteAvatar(playerId);
         await this.persist();
         safeSend(ws, { type: "left" });
         try {
@@ -1322,6 +1372,7 @@ export class GameRoom {
     } else {
       delete this.tokens[playerId];
     }
+    await this.deleteAvatar(playerId);
     safeSend(ws, { type: "ack", id: commandId, ok: true, revision: this.roomState?.revision ?? 0 });
     safeSend(ws, { type: "left" });
     try {
@@ -1423,8 +1474,9 @@ export class GameRoom {
           .filter((request) => now - request.createdAt < JOIN_REQUEST_TTL_MS),
       };
       for (const request of expired) {
-        // 申请过期时同时删除 token（B007）。
+        // 申请过期时同时删除 token 与房间内临时头像（B007）。
         delete this.tokens[request.id];
+        await this.deleteAvatar(request.id);
         const socket = this.socketForPlayer(request.id, true);
         if (socket) {
           safeSend(socket, { type: "rejected", reason: "加入申请已过期" });
@@ -1524,6 +1576,75 @@ export class GameRoom {
       if (attachment?.playerId === playerId && (includePending || !attachment.pending)) return ws;
     }
     return null;
+  }
+
+  private avatarStorageKey(playerId: string) {
+    return `avatar:${playerId}`;
+  }
+
+  private async deleteAvatar(playerId: string) {
+    await this.ctx.storage.delete(this.avatarStorageKey(playerId));
+  }
+
+  private async readAvatar(playerId: string): Promise<StoredAvatar | null> {
+    return await this.ctx.storage.get<StoredAvatar>(this.avatarStorageKey(playerId)) ?? null;
+  }
+
+  private sendAvatar(ws: WorkerWebSocket, playerId: string, avatar: StoredAvatar) {
+    const frame = encodeAvatarDeliveryFrame(playerId, avatar.mime, avatar.bytes);
+    if (frame) safeSendBinary(ws, frame);
+  }
+
+  private async sendVisibleAvatars(ws: WorkerWebSocket, attachment: WsAttachment) {
+    await this.loadData();
+    if (!this.roomState || attachment.pending) return;
+    const visibleIds = this.roomState.players.map((player) => player.id);
+    if (attachment.playerId === this.roomState.hostId) {
+      visibleIds.push(...this.roomState.pendingJoinRequests.map((request) => request.id));
+    }
+    for (const playerId of visibleIds) {
+      const avatar = await this.readAvatar(playerId);
+      if (avatar) this.sendAvatar(ws, playerId, avatar);
+    }
+  }
+
+  private async broadcastStoredAvatar(playerId: string, excludeSocket?: WorkerWebSocket) {
+    const avatar = await this.readAvatar(playerId);
+    if (!avatar) return;
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket === excludeSocket) continue;
+      const attachment = socket.deserializeAttachment<WsAttachment>();
+      if (!attachment || attachment.pending) continue;
+      this.sendAvatar(socket, playerId, avatar);
+    }
+  }
+
+  private async handleAvatarMessage(ws: WorkerWebSocket, attachment: WsAttachment, frame: ArrayBuffer) {
+    const decoded = decodeAvatarUploadFrame(frame);
+    if (!decoded) return;
+    const now = Date.now();
+    if (attachment.avatarUpdatedAt && now - attachment.avatarUpdatedAt < 1_500) return;
+
+    await this.loadData();
+    if (!this.roomState) return;
+    const isPlayer = this.roomState.players.some((player) => player.id === attachment.playerId);
+    const isPending = !isPlayer && this.roomState.pendingJoinRequests.some((request) => request.id === attachment.playerId);
+    if (!isPlayer && !isPending) return;
+
+    ws.serializeAttachment({ ...attachment, pending: isPending, avatarUpdatedAt: now });
+    const avatar: StoredAvatar = { mime: decoded.mime, bytes: decoded.bytes };
+    await this.ctx.storage.put(this.avatarStorageKey(attachment.playerId), avatar);
+
+    if (isPending) {
+      for (const hostSocket of this.ctx.getWebSockets(`player:${this.roomState.hostId}`)) {
+        if (hostSocket === ws) continue;
+        const hostAttachment = hostSocket.deserializeAttachment<WsAttachment>();
+        if (!hostAttachment || hostAttachment.pending) continue;
+        this.sendAvatar(hostSocket, attachment.playerId, avatar);
+      }
+      return;
+    }
+    await this.broadcastStoredAvatar(attachment.playerId, ws);
   }
 
   /** 断线重连后重放未确认的挑战弃牌揭示队列（N005）。 */

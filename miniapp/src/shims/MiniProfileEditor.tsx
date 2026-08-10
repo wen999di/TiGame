@@ -1,10 +1,27 @@
 import { Button, Image, Input, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { useEffect, useState } from "react";
+import { MAX_AVATAR_BYTES, type AvatarMime } from "../../../app/game/avatar-frame";
+
+const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v4";
+
+function readAvatarBinary(filePath: string): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    Taro.getFileSystemManager().readFile({
+      filePath,
+      success: (result) => {
+        if (result.data instanceof ArrayBuffer) resolve(result.data);
+        else reject(new Error("头像文件不是二进制数据"));
+      },
+      fail: reject,
+    });
+  });
+}
 
 type MiniProfile = {
   nickname: string;
-  avatarData?: string;
+  avatarPath?: string;
+  avatarMime?: AvatarMime;
 };
 
 type MiniProfileEditorProps = {
@@ -12,9 +29,9 @@ type MiniProfileEditorProps = {
   onProfileChange: (profile: MiniProfile | null) => void;
 };
 
-
-const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v3";
-const AVATAR_DATA_MAX = 8192;
+function isAvatarMime(value: unknown): value is AvatarMime {
+  return value === "image/jpeg" || value === "image/png" || value === "image/webp";
+}
 
 function readProfileDraft(): Partial<MiniProfile> {
   try {
@@ -22,8 +39,12 @@ function readProfileDraft(): Partial<MiniProfile> {
     const parsed = typeof value === "string" ? JSON.parse(value) as Partial<MiniProfile> : value;
     const rawNickname = typeof parsed?.nickname === "string" ? parsed.nickname.trim().slice(0, 12) : "";
     const nickname = rawNickname === "微信用户" ? "" : rawNickname;
-    const avatarData = typeof parsed?.avatarData === "string" ? parsed.avatarData : "";
-    return { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
+    const avatarPath = typeof parsed?.avatarPath === "string" ? parsed.avatarPath : "";
+    const avatarMime = isAvatarMime(parsed?.avatarMime) ? parsed.avatarMime : undefined;
+    return {
+      ...(nickname ? { nickname } : {}),
+      ...(avatarPath && avatarMime ? { avatarPath, avatarMime } : {}),
+    };
   } catch {
     return {};
   }
@@ -32,24 +53,18 @@ function readProfileDraft(): Partial<MiniProfile> {
 function saveProfileDraft(changes: Partial<MiniProfile>): Partial<MiniProfile> {
   const current = readProfileDraft();
   const nicknameSource = changes.nickname === undefined ? current.nickname : changes.nickname;
-  const avatarSource = changes.avatarData === undefined ? current.avatarData : changes.avatarData;
+  const avatarPathSource = changes.avatarPath === undefined ? current.avatarPath : changes.avatarPath;
+  const avatarMimeSource = changes.avatarMime === undefined ? current.avatarMime : changes.avatarMime;
   const rawNickname = typeof nicknameSource === "string" ? nicknameSource.trim().slice(0, 12) : "";
   const nickname = rawNickname === "微信用户" ? "" : rawNickname;
-  const avatarData = typeof avatarSource === "string" ? avatarSource : "";
-  const next = { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
+  const avatarPath = typeof avatarPathSource === "string" ? avatarPathSource : "";
+  const avatarMime = isAvatarMime(avatarMimeSource) ? avatarMimeSource : undefined;
+  const next = {
+    ...(nickname ? { nickname } : {}),
+    ...(avatarPath && avatarMime ? { avatarPath, avatarMime } : {}),
+  };
   Taro.setStorageSync(WECHAT_PROFILE_STORAGE_KEY, next);
   return next;
-}
-
-function readFileBase64(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    Taro.getFileSystemManager().readFile({
-      filePath,
-      encoding: "base64",
-      success: (result) => resolve(String(result.data ?? "")),
-      fail: reject,
-    });
-  });
 }
 
 async function localAvatarPath(source: string): Promise<string> {
@@ -65,13 +80,30 @@ async function localAvatarPath(source: string): Promise<string> {
   return source;
 }
 
-async function makeAvatarThumbnail(source: string): Promise<string> {
+function normalizeMime(type: unknown): AvatarMime {
+  const value = String(type || "jpeg").toLowerCase();
+  if (value === "png") return "image/png";
+  if (value === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+function persistAvatarFile(tempFilePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    Taro.saveFile({
+      tempFilePath,
+      success: (result) => resolve(result.savedFilePath),
+      fail: reject,
+    });
+  });
+}
+
+async function makeAvatarThumbnail(source: string): Promise<{ avatarPath: string; avatarMime: AvatarMime }> {
   const localSource = await localAvatarPath(source);
   const attempts = [
-    { size: 96, quality: 68 },
-    { size: 80, quality: 58 },
-    { size: 72, quality: 50 },
-    { size: 64, quality: 46 },
+    { size: 160, quality: 80 },
+    { size: 144, quality: 76 },
+    { size: 128, quality: 72 },
+    { size: 112, quality: 68 },
   ];
   for (const attempt of attempts) {
     const compressed = await Taro.compressImage({
@@ -80,12 +112,12 @@ async function makeAvatarThumbnail(source: string): Promise<string> {
       compressedWidth: attempt.size,
       compressedHeight: attempt.size,
     });
+    const bytes = await readAvatarBinary(compressed.tempFilePath);
+    if (bytes.byteLength > MAX_AVATAR_BYTES) continue;
     const info = await Taro.getImageInfo({ src: compressed.tempFilePath }).catch(() => null);
-    const rawType = String(info?.type || "jpeg").toLowerCase();
-    const type = rawType === "jpg" ? "jpeg" : /^(jpeg|png|webp)$/.test(rawType) ? rawType : "jpeg";
-    const base64 = await readFileBase64(compressed.tempFilePath);
-    const dataUrl = `data:image/${type};base64,${base64}`;
-    if (dataUrl.length <= AVATAR_DATA_MAX) return dataUrl;
+    const avatarPath = await persistAvatarFile(compressed.tempFilePath);
+    if (!avatarPath) continue;
+    return { avatarPath, avatarMime: normalizeMime(info?.type) };
   }
   throw new Error("头像压缩后仍然过大，请换一张图片");
 }
@@ -97,19 +129,23 @@ export function MiniProfileEditor({ profile, onProfileChange }: MiniProfileEdito
   const stored = readProfileDraft();
   const [draft, setDraft] = useState<MiniProfile>(() => ({
     nickname: profile?.nickname || stored.nickname || "",
-    avatarData: profile?.avatarData || stored.avatarData || "",
+    avatarPath: profile?.avatarPath || stored.avatarPath || "",
+    avatarMime: profile?.avatarMime || stored.avatarMime,
   }));
   const [avatarBusy, setAvatarBusy] = useState(false);
 
   useEffect(() => {
     onProfileChange(draft);
-    // 只在组件进入页面时把已缓存的草稿同步给共享页面。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateDraft = (changes: Partial<MiniProfile>) => {
     const next = saveProfileDraft(changes);
-    const normalized = { nickname: next.nickname || "", avatarData: next.avatarData || "" };
+    const normalized: MiniProfile = {
+      nickname: next.nickname || "",
+      avatarPath: next.avatarPath || "",
+      avatarMime: next.avatarMime,
+    };
     setDraft(normalized);
     onProfileChange(normalized);
   };
@@ -119,8 +155,12 @@ export function MiniProfileEditor({ profile, onProfileChange }: MiniProfileEdito
     if (!avatarUrl || avatarBusy) return;
     setAvatarBusy(true);
     try {
-      const avatarData = await makeAvatarThumbnail(avatarUrl);
-      updateDraft({ avatarData });
+      const previousPath = draft.avatarPath;
+      const nextAvatar = await makeAvatarThumbnail(avatarUrl);
+      updateDraft(nextAvatar);
+      if (previousPath && previousPath !== nextAvatar.avatarPath) {
+        void Taro.removeSavedFile({ filePath: previousPath }).catch(() => {});
+      }
     } catch (error) {
       console.error("[TiGame miniapp] avatar processing failed", error);
       void Taro.showToast({ title: "头像处理失败，请重试", icon: "none" });
@@ -138,13 +178,13 @@ export function MiniProfileEditor({ profile, onProfileChange }: MiniProfileEdito
       <View className="miniapp-avatar-field">
         <Text className="miniapp-profile-label">头像</Text>
         <Button
-          className={`miniapp-avatar-button${draft.avatarData ? " has-avatar" : ""}`}
+          className={`miniapp-avatar-button${draft.avatarPath ? " has-avatar" : ""}`}
           openType="chooseAvatar"
           onChooseAvatar={chooseAvatar as never}
           disabled={avatarBusy}
         >
-          {draft.avatarData ? (
-            <Image className="miniapp-avatar-image" src={draft.avatarData} mode="aspectFill" />
+          {draft.avatarPath ? (
+            <Image className="miniapp-avatar-image" src={draft.avatarPath} mode="aspectFill" />
           ) : (
             <View className="miniapp-avatar-placeholder"><Text>＋</Text></View>
           )}

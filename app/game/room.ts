@@ -122,7 +122,6 @@ export function createRoomState(
   hostId: string,
   hostName: string,
   settings: RoomSettings,
-  hostAvatarData?: string,
 ): RoomState {
   return {
     roomId,
@@ -138,7 +137,6 @@ export function createRoomState(
       online: false,
       isHost: true,
       offlineSince: Date.now(),
-      ...(hostAvatarData ? { avatarData: hostAvatarData } : {}),
     }],
     phase: "LOBBY",
     gameId: null,
@@ -296,7 +294,6 @@ export function approveJoinRequest(
     name: request.playerName,
     color: PLAYER_COLORS[state.players.length % PLAYER_COLORS.length],
     online: connected,
-    ...(request.avatarData ? { avatarData: request.avatarData } : {}),
   };
   return {
     state: {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic BOM/Taro compatibility bridge */
 import Taro from "@tarojs/taro";
 import { document as taroDocument, navigator as taroNavigator, window as taroWindow } from "@tarojs/runtime";
-import { readWechatProfile } from "./profile";
+import { cacheRoomAvatarBinary, clearRoomAvatarCache, readAvatarBinary, readWechatProfile } from "./profile";
 
 declare const __TIGAME_API_BASE__: string;
 declare const wx: {
@@ -16,6 +16,7 @@ type FetchInit = {
 };
 
 const apiBase = __TIGAME_API_BASE__.replace(/\/$/, "");
+clearRoomAvatarCache();
 const root = globalThis as unknown as Record<string, any>;
 // Taro 将源码里的 window / document / navigator 重写为 @tarojs/runtime 的 BOM 对象。
 // 因此仅给 globalThis 打补丁并不能覆盖共享 Web 页面实际读取到的对象。
@@ -127,11 +128,11 @@ class MiniWebSocket {
   readonly CLOSED = 3;
   readyState = MiniWebSocket.CONNECTING;
   private _onopen: ((event: unknown) => void) | null = null;
-  private _onmessage: ((event: { data: string }) => void) | null = null;
+  private _onmessage: ((event: { data: string | ArrayBuffer }) => void) | null = null;
   private _onerror: ((event: unknown) => void) | null = null;
   private _onclose: ((event: { code?: number; reason?: string }) => void) | null = null;
   private pendingOpen: unknown[] = [];
-  private pendingMessages: Array<{ data: string }> = [];
+  private pendingMessages: Array<{ data: string | ArrayBuffer }> = [];
   private pendingErrors: unknown[] = [];
   private pendingClose: Array<{ code?: number; reason?: string }> = [];
   private task: any = null;
@@ -145,7 +146,7 @@ class MiniWebSocket {
   }
 
   get onmessage() { return this._onmessage; }
-  set onmessage(handler: ((event: { data: string }) => void) | null) {
+  set onmessage(handler: ((event: { data: string | ArrayBuffer }) => void) | null) {
     this._onmessage = handler;
     if (!handler) return;
     const queued = this.pendingMessages.splice(0);
@@ -173,7 +174,7 @@ class MiniWebSocket {
     else this.pendingOpen.push(event);
   }
 
-  private emitMessage(event: { data: string }) {
+  private emitMessage(event: { data: string | ArrayBuffer }) {
     if (this._onmessage) this._onmessage(event);
     else {
       this.pendingMessages.push(event);
@@ -225,7 +226,10 @@ class MiniWebSocket {
       });
       task.onMessage?.((event: { data: unknown }) => {
         if (terminal) return;
-        this.emitMessage({ data: socketDataToString(event.data) });
+        const data = typeof event.data === "string" || event.data instanceof ArrayBuffer
+          ? event.data
+          : socketDataToString(event.data);
+        this.emitMessage({ data });
       });
       task.onError?.((event: unknown) => fail("WebSocket 连接失败", event));
       task.onClose?.((event: { code?: number; reason?: string }) => {
@@ -265,7 +269,7 @@ class MiniWebSocket {
     }
   }
 
-  send(data: string) {
+  send(data: string | ArrayBuffer) {
     if (this.readyState !== MiniWebSocket.OPEN || !this.task) throw new Error("WebSocket is not open");
     void this.task.send({ data });
   }
@@ -333,6 +337,9 @@ root.__TIGAME_PLATFORM__ = {
   webBase: apiBase,
   getInviteCode: currentInviteCode,
   getUserProfile: readWechatProfile,
+  readAvatarBinary,
+  cacheAvatarBinary: cacheRoomAvatarBinary,
+  clearAvatarCache: clearRoomAvatarCache,
   connectWebSocket: (url: string) => new MiniWebSocket(url) as unknown as WebSocket,
   clearInviteCode() {},
   async scanCode() {

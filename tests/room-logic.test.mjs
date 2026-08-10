@@ -15,6 +15,23 @@ import {
 } from "../app/game/undercover.ts";
 import { approveJoinRequest, backToLobby, createRoomState, enterGame, hostReturnToGame, hostToLobby, publicRoom, settleAfterRemoval } from "../app/game/room.ts";
 import { normalizeRoomId } from "../app/game/room-id.ts";
+import { decodeAvatarDeliveryFrame, decodeAvatarUploadFrame, encodeAvatarDeliveryFrame, encodeAvatarUploadFrame } from "../app/game/avatar-frame.ts";
+
+test("avatar websocket frames round-trip binary bytes without base64", () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 1, 2, 3, 4]).buffer;
+  const upload = encodeAvatarUploadFrame("image/jpeg", jpeg);
+  assert.ok(upload instanceof ArrayBuffer);
+  const decodedUpload = decodeAvatarUploadFrame(upload);
+  assert.equal(decodedUpload?.mime, "image/jpeg");
+  assert.deepEqual([...new Uint8Array(decodedUpload.bytes)], [...new Uint8Array(jpeg)]);
+
+  const delivery = encodeAvatarDeliveryFrame("player-123", decodedUpload.mime, decodedUpload.bytes);
+  assert.ok(delivery instanceof ArrayBuffer);
+  const decodedDelivery = decodeAvatarDeliveryFrame(delivery);
+  assert.equal(decodedDelivery?.playerId, "player-123");
+  assert.equal(decodedDelivery?.mime, "image/jpeg");
+  assert.deepEqual([...new Uint8Array(decodedDelivery.bytes)], [...new Uint8Array(jpeg)]);
+});
 
 function players(ids, onlineIds) {
   const all = {
@@ -522,18 +539,17 @@ test("approving a join request with a duplicate nickname is rejected", () => {
   assert.equal(result.state.players.length, 1);
 });
 
-test("wechat avatar thumbnails survive room creation, projection and join approval", () => {
-  const avatar = "data:image/jpeg;base64,AA==";
-  let room = createRoomState("ABC-123", "host", "房主", { maxPlayers: 16 }, avatar);
-  assert.equal(room.players[0].avatarData, avatar);
-  assert.equal(publicRoom(room, { playerId: "host", isHost: true }).players[0].avatarData, avatar);
+test("room state stays image-free across creation and join approval", () => {
+  let room = createRoomState("ABC-123", "host", "房主", { maxPlayers: 16 });
+  assert.equal("avatarData" in room.players[0], false);
+  assert.equal("avatarData" in publicRoom(room, { playerId: "host", isHost: true }).players[0], false);
 
   room = {
     ...room,
-    pendingJoinRequests: [{ id: "newbie", playerName: "新人", avatarData: avatar, createdAt: Date.now() }],
+    pendingJoinRequests: [{ id: "newbie", playerName: "新人", createdAt: Date.now() }],
   };
   const approved = approveJoinRequest(room, "newbie", true);
-  assert.equal(approved.state.players.find((player) => player.id === "newbie")?.avatarData, avatar);
+  assert.equal("avatarData" in approved.state.players.find((player) => player.id === "newbie"), false);
 });
 
 test("room-level enterGame/backToLobby and publicRoom privacy", () => {

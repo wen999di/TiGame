@@ -9,6 +9,7 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import { GAME_LIST, ROOM_MAX_PLAYERS, type GameId, type PendingJoinRequest, type Player, type PublicRoom } from "./game/room";
 import { ROOM_ID_PATTERN, normalizeRoomId } from "./game/room-id";
+import { decodeAvatarDeliveryFrame, encodeAvatarUploadFrame, type AvatarMime } from "./game/avatar-frame";
 import { type SecretCard, type UndercoverPublicState, type UndercoverSettings } from "./game/undercover";
 import { type WordBankScope } from "./game/deal-cards";
 import { type ChallengePublicState, type ChallengeSettings } from "./game/challenge";
@@ -40,7 +41,8 @@ type PrivateCard = SecretCard | { action: string };
 
 type TiGameUserProfile = {
   nickname: string;
-  avatarData?: string;
+  avatarPath?: string;
+  avatarMime?: AvatarMime;
 };
 
 type TiGamePlatformBridge = {
@@ -49,6 +51,9 @@ type TiGamePlatformBridge = {
   webBase?: string;
   getInviteCode?: () => string;
   getUserProfile?: () => TiGameUserProfile | null;
+  readAvatarBinary?: (filePath: string) => Promise<ArrayBuffer>;
+  cacheAvatarBinary?: (roomId: string, playerId: string, mime: AvatarMime, bytes: ArrayBuffer) => Promise<string>;
+  clearAvatarCache?: () => void;
   connectWebSocket?: (url: string) => WebSocket;
   clearInviteCode?: () => void;
   scanCode?: () => Promise<string>;
@@ -63,7 +68,7 @@ function getPlatformBridge(): TiGamePlatformBridge | undefined {
 type JoinFlight = {
   id: string;
   name: string;
-  avatarData?: string;
+  avatarUrl?: string;
   key: number;
   from: { x: number; y: number };
   to: { x: number; y: number } | null;
@@ -390,9 +395,9 @@ function storeNickname(name: string) {
   }
 }
 
-function avatarFace(name: string, avatarData?: string) {
-  return avatarData
-    ? <img className="avatar-image" src={avatarData} alt="" draggable={false} />
+function avatarFace(name: string, avatarUrl?: string) {
+  return avatarUrl
+    ? <img className="avatar-image" src={avatarUrl} alt="" draggable={false} />
     : name.slice(0, 1);
 }
 
@@ -1507,6 +1512,9 @@ export default function Home() {
   const [platformProfile, setPlatformProfile] = useState<TiGameUserProfile | null>(() => getPlatformBridge()?.getUserProfile?.() ?? null);
   const [screen, setScreen] = useState<Screen>("home");
   const [room, setRoom] = useState<Room | null>(null);
+  const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
+  const avatarUrlsRef = useRef<Record<string, string>>({});
+  const webAvatarObjectUrlsRef = useRef<Set<string>>(new Set());
   const [notice, setNotice] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   // 房主在游戏中点击“返回大厅”时选择“暂时离开 / 结束游戏”的弹窗。
@@ -1541,7 +1549,7 @@ export default function Home() {
   const [justJoinedId, setJustJoinedId] = useState<string | null>(null);
   const justJoinedTimerRef = useRef<number | undefined>(undefined);
   // 申请行退场动效：服务器确认后先播放收起动画，再真正移除。
-  const [leavingRequests, setLeavingRequests] = useState<Array<{ id: string; playerName: string; avatarData?: string }>>([]);
+  const [leavingRequests, setLeavingRequests] = useState<Array<{ id: string; playerName: string; avatarUrl?: string }>>([]);
   // 飞行头像：申请列表的头像飞向玩家列表的对应位置。
   const [joinFlight, setJoinFlight] = useState<JoinFlight | null>(null);
   const joinFlightRef = useRef<JoinFlight | null>(null);
@@ -1748,8 +1756,8 @@ export default function Home() {
   // 长按踢人成功后抑制同一次点击触发的投票（F015）。
   const suppressAvatarClickRef = useRef(false);
   // 批准动画在服务端事件中触发；这两个回调定义在后面，通过 ref 转发避免 TDZ。
-  const startJoinFlightRef = useRef<(id: string, name: string, avatarData?: string) => void>(() => {});
-  const beginRequestExitRef = useRef<(id: string, name: string, avatarData?: string) => void>(() => {});
+  const startJoinFlightRef = useRef<(id: string, name: string) => void>(() => {});
+  const beginRequestExitRef = useRef<(id: string, name: string) => void>(() => {});
   // 扫码成功后的统一退出/验证由后面的函数实现，通过 ref 转发（F008/F010）。
   const closeScannerRef = useRef<(reason: "button" | "scan" | "image") => Promise<void>>(async () => {});
   const verifyJoinCodeRef = useRef<(code: string) => Promise<boolean>>(async () => false);
@@ -1765,6 +1773,71 @@ export default function Home() {
   // 若只依赖 screen/inviteUrl，effect 会在 canvas 出现前空跑一次，导致二维码不绘制。
   const [qrCanvas, setQrCanvas] = useState<HTMLCanvasElement | null>(null);
   const handleServerMessageRef = useRef<(raw: string) => void>(() => {});
+
+  const setAvatarUrl = useCallback((playerId: string, url: string) => {
+    if (!playerId || !url) return;
+    const previous = avatarUrlsRef.current[playerId];
+    if (previous === url) return;
+    if (previous && webAvatarObjectUrlsRef.current.has(previous)) {
+      try { URL.revokeObjectURL(previous); } catch {}
+      webAvatarObjectUrlsRef.current.delete(previous);
+    }
+    const next = { ...avatarUrlsRef.current, [playerId]: url };
+    avatarUrlsRef.current = next;
+    setAvatarUrls(next);
+  }, []);
+
+  const clearAvatarUrls = useCallback(() => {
+    getPlatformBridge()?.clearAvatarCache?.();
+    for (const url of webAvatarObjectUrlsRef.current) {
+      try { URL.revokeObjectURL(url); } catch {}
+    }
+    webAvatarObjectUrlsRef.current.clear();
+    avatarUrlsRef.current = {};
+    setAvatarUrls({});
+  }, []);
+
+  const cacheReceivedAvatar = useCallback(async (roomId: string, frame: ArrayBuffer) => {
+    const decoded = decodeAvatarDeliveryFrame(frame);
+    if (!decoded) return;
+    const bridge = getPlatformBridge();
+    let url = "";
+    try {
+      if (bridge?.cacheAvatarBinary) {
+        url = await bridge.cacheAvatarBinary(roomId, decoded.playerId, decoded.mime, decoded.bytes);
+      } else if (typeof Blob !== "undefined" && typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+        url = URL.createObjectURL(new Blob([decoded.bytes], { type: decoded.mime }));
+        webAvatarObjectUrlsRef.current.add(url);
+      }
+    } catch (error) {
+      console.warn("[TiGame] avatar cache failed", error);
+      return;
+    }
+    if (!url || sessionRef.current?.roomId !== roomId) {
+      if (url && webAvatarObjectUrlsRef.current.has(url)) {
+        try { URL.revokeObjectURL(url); } catch {}
+        webAvatarObjectUrlsRef.current.delete(url);
+      }
+      return;
+    }
+    setAvatarUrl(decoded.playerId, url);
+  }, [setAvatarUrl]);
+
+  const uploadLocalAvatar = useCallback(async (ws: WebSocket, session: StoredSession) => {
+    const bridge = getPlatformBridge();
+    if (bridge?.kind !== "weapp" || !bridge.readAvatarBinary) return;
+    const profile = bridge.getUserProfile?.();
+    if (!profile?.avatarPath || !profile.avatarMime) return;
+    setAvatarUrl(session.playerId, profile.avatarPath);
+    try {
+      const bytes = await bridge.readAvatarBinary(profile.avatarPath);
+      const frame = encodeAvatarUploadFrame(profile.avatarMime, bytes);
+      if (!frame || wsRef.current !== ws || ws.readyState !== WS_OPEN) return;
+      ws.send(frame);
+    } catch (error) {
+      console.warn("[TiGame] avatar upload failed", error);
+    }
+  }, [setAvatarUrl]);
 
   useEffect(() => {
     roomRef.current = room;
@@ -1952,6 +2025,7 @@ export default function Home() {
     roomRef.current = null;
     clearStoredSession();
     setRoom(null);
+    clearAvatarUrls();
     updateSecretCard(null);
     setWsStatus("closed");
     setReconnectPhase("idle");
@@ -1965,7 +2039,7 @@ export default function Home() {
     if (flightFallbackTimerRef.current) window.clearTimeout(flightFallbackTimerRef.current);
     flightFallbackTimerRef.current = undefined;
     appliedRevisionRef.current = 0;
-  }, [updateSecretCard, stopTransferWarnTimers]);
+  }, [updateSecretCard, stopTransferWarnTimers, clearAvatarUrls]);
 
   const handleKicked = useCallback((reason?: string) => {
     terminateSession();
@@ -2037,8 +2111,8 @@ export default function Home() {
         if (event?.game === "room" && event.kind === "join-approved") {
           const request = roomRef.current?.pendingJoinRequests.find((item) => item.id === event.playerId);
           if (request) {
-            beginRequestExitRef.current(request.id, request.playerName, request.avatarData);
-            startJoinFlightRef.current(request.id, request.playerName, request.avatarData);
+            beginRequestExitRef.current(request.id, request.playerName);
+            startJoinFlightRef.current(request.id, request.playerName);
           }
           setApprovingRequestId(null);
         }
@@ -2193,6 +2267,7 @@ export default function Home() {
       setReconnectPhase("socket");
       const platformSocket = getPlatformBridge()?.connectWebSocket;
       const ws = platformSocket ? platformSocket(url) : new WebSocket(url);
+      try { ws.binaryType = "arraybuffer"; } catch {}
       wsRef.current = ws;
       let syncTimer: number | undefined;
       const clearSyncTimer = () => {
@@ -2211,6 +2286,8 @@ export default function Home() {
           console.warn("[TiGame] WebSocket opened but room sync timed out; reconnecting");
           try { ws.close(4000, "sync-timeout"); } catch {}
         }, 6_000);
+        // 小程序头像只在 WebSocket 建立后以二进制帧上传，不进入 HTTP/room JSON。
+        void uploadLocalAvatar(ws, session);
         // 连接恢复后立即重试未确认的转分（同一 operationId，服务端幂等去重）。
         nudgeTransferRetryRef.current?.();
         // 只在连接真正稳定后重置退避计数（B004）。
@@ -2224,7 +2301,16 @@ export default function Home() {
       ws.onmessage = (event) => {
         // 旧 socket 的延迟消息一律忽略（B024）。
         if (wsRef.current !== ws) return;
-        const raw = String(event.data);
+        const data = event.data;
+        if (data instanceof ArrayBuffer) {
+          void cacheReceivedAvatar(session.roomId, data);
+          return;
+        }
+        if (typeof Blob !== "undefined" && data instanceof Blob) {
+          void data.arrayBuffer().then((buffer) => cacheReceivedAvatar(session.roomId, buffer));
+          return;
+        }
+        const raw = String(data);
         try {
           const envelope = JSON.parse(raw) as { type?: string };
           if (envelope.type === "hello" || envelope.type === "room" || envelope.type === "approved") clearSyncTimer();
@@ -2299,7 +2385,7 @@ export default function Home() {
         scheduleRetry(closedSession);
       };
     });
-  }, [handleKicked, terminateSession]);
+  }, [handleKicked, terminateSession, uploadLocalAvatar, cacheReceivedAvatar]);
 
   /** 等待服务器 ACK 的命令（4.3）：返回完整结果，区分“已确认/明确拒绝/结果未知”（P0-04 加固）。 */
   const sendCommandDetailed = useCallback((payload: Record<string, unknown>, options?: { id?: string }): Promise<CommandResult> => {
@@ -3698,15 +3784,16 @@ export default function Home() {
   }, [flashJustJoined]);
 
   // 申请行退场：先播放收起动画，动画结束（或超时）后从 DOM 移除。
-  const beginRequestExit = useCallback((targetId: string, targetName: string, avatarData?: string) => {
-    setLeavingRequests((prev) => (prev.some((item) => item.id === targetId) ? prev : [...prev, { id: targetId, playerName: targetName, ...(avatarData ? { avatarData } : {}) }]));
+  const beginRequestExit = useCallback((targetId: string, targetName: string) => {
+    const avatarUrl = avatarUrlsRef.current[targetId];
+    setLeavingRequests((prev) => (prev.some((item) => item.id === targetId) ? prev : [...prev, { id: targetId, playerName: targetName, ...(avatarUrl ? { avatarUrl } : {}) }]));
     window.setTimeout(() => {
       setLeavingRequests((prev) => prev.filter((item) => item.id !== targetId));
     }, 2000);
   }, []);
 
   // 记录申请列表头像的位置，生成一个“飞向玩家列表”的飞行头像。
-  const startJoinFlight = useCallback((targetId: string, targetName: string, avatarData?: string) => {
+  const startJoinFlight = useCallback((targetId: string, targetName: string) => {
     // 若上一枚飞行头像尚未落地，先让它提前落地，避免玩家行一直隐藏。
     if (incomingRef.current && incomingRef.current !== targetId) {
       completeIncomingJoin(incomingRef.current);
@@ -3718,7 +3805,7 @@ export default function Home() {
     const flight: JoinFlight = {
       id: targetId,
       name: targetName,
-      ...(avatarData ? { avatarData } : {}),
+      ...(avatarUrlsRef.current[targetId] ? { avatarUrl: avatarUrlsRef.current[targetId] } : {}),
       key: Date.now(),
       from: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
       to: null,
@@ -3754,13 +3841,13 @@ export default function Home() {
     }
   };
 
-  const rejectJoinRequest = async (targetId: string, targetName: string, avatarData?: string) => {
+  const rejectJoinRequest = async (targetId: string, targetName: string) => {
     const ok = await sendCommand({ type: "reject-join", playerId: targetId });
     if (!ok) {
       setNotice("拒绝发送失败，请重试");
       return;
     }
-    beginRequestExit(targetId, targetName, avatarData);
+    beginRequestExit(targetId, targetName);
   };
 
   const askConfirm = (options: ConfirmDialog) => {
@@ -3804,6 +3891,7 @@ export default function Home() {
     roomRef.current = null;
     clearStoredSession();
     setRoom(null);
+    clearAvatarUrls();
     updateSecretCard(null);
     setWsStatus("closed");
     setScreen("home");
@@ -3953,7 +4041,8 @@ export default function Home() {
   }, []);
 
   const miniProfileReady = Boolean(
-    platformProfile?.avatarData
+    platformProfile?.avatarPath
+    && platformProfile.avatarMime
     && platformProfile.nickname?.trim()
     && platformProfile.nickname.trim() !== "微信用户",
   );
@@ -3963,8 +4052,9 @@ export default function Home() {
     if (bridge?.kind !== "weapp") return platformProfile;
     const candidate = platformProfile ?? bridge.getUserProfile?.() ?? null;
     const nickname = candidate?.nickname?.trim().slice(0, 12) || "";
-    const avatarData = candidate?.avatarData || "";
-    if (!avatarData) {
+    const avatarPath = candidate?.avatarPath || "";
+    const avatarMime = candidate?.avatarMime;
+    if (!avatarPath || !avatarMime) {
       setNotice("请先点击头像，选择微信头像");
       return null;
     }
@@ -3972,7 +4062,7 @@ export default function Home() {
       setNotice("请点击昵称输入框，选择或填写微信昵称");
       return null;
     }
-    const profile = { nickname, avatarData };
+    const profile = { nickname, avatarPath, avatarMime };
     if (candidate !== platformProfile) setPlatformProfile(profile);
     setForm({ name: nickname });
     setJoinName(nickname);
@@ -4002,7 +4092,6 @@ export default function Home() {
             body: JSON.stringify({
               roomId,
               hostName: playerName,
-              ...(activeProfile?.avatarData ? { hostAvatarData: activeProfile.avatarData } : {}),
             }),
             signal: controller.signal,
           });
@@ -4017,6 +4106,7 @@ export default function Home() {
           };
           sessionRef.current = session;
           storeSession(session);
+          if (activeProfile?.avatarPath) setAvatarUrl(session.playerId, activeProfile.avatarPath);
           applySharedRoom(payload.room);
           setScreen("lobby");
           setNotice("房间已创建，把邀请码或二维码发给其他玩家");
@@ -4093,7 +4183,6 @@ export default function Home() {
         body: JSON.stringify({
           roomId,
           playerName,
-          ...(activeProfile?.avatarData ? { avatarData: activeProfile.avatarData } : {}),
           ...(resumeCredential ?? {}),
         }),
       });
@@ -4102,6 +4191,7 @@ export default function Home() {
       const session: StoredSession = { roomId, playerId: payload.playerId, token: payload.token, playerName };
       sessionRef.current = session;
       storeSession(session);
+      if (activeProfile?.avatarPath) setAvatarUrl(session.playerId, activeProfile.avatarPath);
       if (payload.resumed) {
         // 已恢复原记录：直接重连，由服务器决定进入房间还是等待确认。
         setJoinStatus("idle");
@@ -4295,7 +4385,7 @@ export default function Home() {
           onPointerLeave={cancelLongPress}
           onPointerCancel={cancelLongPress}
           aria-label={`${player.name}${allowKick ? "，长按头像可管理" : ""}`}
-        >{avatarFace(player.name, player.avatarData)}{voteState && extra?.ripple && <span className="vote-avatar-ripples" aria-hidden="true"><i /><i /><i /></span>}</span>
+        >{avatarFace(player.name, avatarUrls[player.id])}{voteState && extra?.ripple && <span className="vote-avatar-ripples" aria-hidden="true"><i /><i /><i /></span>}</span>
         {(showConfirm === "voted" || voteState?.selected || voteState?.confirmed) && <span className={`vote-your-label${voteState?.confirmed ? "" : voteState?.selected ? " vote-your-label-pending" : " vote-your-label-hidden"}`}>{voteState?.confirmed ? "你的投票" : voteState?.selected ? "再次点击确认" : ""}</span>}
       </span>
       <div className="player-meta">
@@ -4337,7 +4427,7 @@ export default function Home() {
     };
   }, [room, leavingRequests]);
 
-  const renderJoinRequestRow = (request: { id: string; playerName: string; avatarData?: string }, index: number, leaving: boolean) => (
+  const renderJoinRequestRow = (request: { id: string; playerName: string; avatarUrl?: string }, index: number, leaving: boolean) => (
     <div
       className={`join-request-row${leaving ? " leaving" : ""}`}
       key={request.id}
@@ -4349,11 +4439,11 @@ export default function Home() {
         }
       } : undefined}
     >
-      <span className="avatar avatar-sage">{avatarFace(request.playerName, request.avatarData)}</span>
+      <span className="avatar avatar-sage">{avatarFace(request.playerName, request.avatarUrl || avatarUrls[request.id])}</span>
       <strong>{request.playerName}</strong>
       <div className="join-request-actions">
         <button type="button" onClick={() => approveJoinRequest(request.id)} disabled={approvingRequestId === request.id}>{approvingRequestId === request.id ? "确认中…" : "确认"}</button>
-        <button className="reject-button" type="button" onClick={() => rejectJoinRequest(request.id, request.playerName, request.avatarData)} disabled={approvingRequestId === request.id}>拒绝</button>
+        <button className="reject-button" type="button" onClick={() => rejectJoinRequest(request.id, request.playerName)} disabled={approvingRequestId === request.id}>拒绝</button>
       </div>
     </div>
   );
@@ -4378,7 +4468,7 @@ export default function Home() {
         style={style}
         onAnimationEnd={handleFlightEnd}
         aria-hidden="true"
-      >{avatarFace(joinFlight.name, joinFlight.avatarData)}</span>,
+      >{avatarFace(joinFlight.name, joinFlight.avatarUrl || avatarUrls[joinFlight.id])}</span>,
       document.body,
     );
   };
@@ -4628,9 +4718,9 @@ export default function Home() {
             return (
               <div key={entry.playerId} className={`vote-tally${entry.playerId === eliminatedId ? " vote-tally-eliminated" : ""}`}>
                 {entry.playerId === eliminatedId && <span className="vote-tally-stamp">已淘汰</span>}
-                <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, candidate.avatarData)}</span>}<small>{entry.playerName}</small></div>
+                <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, avatarUrls[candidate.id])}</span>}<small>{entry.playerName}</small></div>
                 <strong>{entry.count} 票</strong>
-                <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, voter.avatarData)}</span> : null; })}</div>
+                <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, avatarUrls[voter.id])}</span> : null; })}</div>
               </div>
             );
           })}
@@ -4647,9 +4737,9 @@ export default function Home() {
               return (
                 <div key={entry.playerId} className={`vote-tally${entry.playerId === voteResult.eliminatedPlayerId ? " vote-tally-eliminated" : ""}`}>
                   {entry.playerId === voteResult.eliminatedPlayerId && <span className="vote-tally-stamp">已淘汰</span>}
-                  <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, candidate.avatarData)}</span>}<small>{entry.playerName}</small></div>
+                  <div className="vote-tally-person">{candidate && <span className={`avatar avatar-${candidate.color} vote-tally-person-avatar`}>{avatarFace(candidate.name, avatarUrls[candidate.id])}</span>}<small>{entry.playerName}</small></div>
                   <strong>{entry.count} 票</strong>
-                  <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, voter.avatarData)}</span> : null; })}</div>
+                  <div className="vote-tally-voters">{(entry.voterIds ?? []).map((voterId) => { const voter = room.players.find((player) => player.id === voterId); return voter ? <span key={voterId} className={`avatar avatar-${voter.color} vote-tally-avatar`}>{avatarFace(voter.name, avatarUrls[voter.id])}</span> : null; })}</div>
                 </div>
               );
             })}
@@ -4797,7 +4887,7 @@ export default function Home() {
             // 视觉上最多展示 4 张牌，多出的只计数不叠加。
             const stackCount = !isOut && !joinNext ? Math.min(Math.max(lives, 1), 4) : 0;
             return <m.div layout exit={{ opacity: 0, scale: 0.92, height: 0, marginBottom: 0 }} transition={motionTokens.layout} data-player-id={player.id} className={`player-row challenge-player-row${isOut || joinNext ? " player-eliminated" : ""}${incomingId === player.id ? " player-incoming" : justJoinedId === player.id ? " just-joined" : ""} ${player.online ? "" : "player-offline"}`} key={player.id}>
-              <span className={`avatar avatar-${player.color}`}>{avatarFace(player.name, player.avatarData)}</span>
+              <span className={`avatar avatar-${player.color}`}>{avatarFace(player.name, avatarUrls[player.id])}</span>
               <div className="player-meta">
                 <strong>{player.name}{player.id === room?.hostId && <span className="host-tag">房主</span>}{player.id === room?.localPlayerId && <span className="me-tag">我</span>}{isOut && <span className="out-tag">淘汰</span>}{joinNext && <span className="out-tag">下一局加入</span>}</strong>
                 <small className="player-status-line">
@@ -4910,7 +5000,7 @@ export default function Home() {
                   </svg>
                 </span>
               )}
-              <span className={`avatar avatar-${player.color}${game.settleReadyPlayerIds.includes(player.id) ? " avatar-settle-ready" : ""}${game.resetReadyPlayerIds.includes(player.id) ? " avatar-reset-ready" : ""}`}>{avatarFace(player.name, player.avatarData)}</span>
+              <span className={`avatar avatar-${player.color}${game.settleReadyPlayerIds.includes(player.id) ? " avatar-settle-ready" : ""}${game.resetReadyPlayerIds.includes(player.id) ? " avatar-reset-ready" : ""}`}>{avatarFace(player.name, avatarUrls[player.id])}</span>
               <span className="mahjong-tile-name">{player.name}{isSelf && "（我）"}</span>
               {player.joinNextRound && <small className="join-next-label">下一局自动加入游戏</small>}
               <span className="mahjong-tile-score">{score}</span>

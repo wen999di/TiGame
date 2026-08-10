@@ -6,8 +6,6 @@ export type Player = {
   color: string;
   online: boolean;
   isHost?: boolean;
-  /** 小程序用户主动选择的微信头像缩略图（data URL，服务端限制大小）。 */
-  avatarData?: string;
   /** 服务器内部记录玩家断开连接的毫秒时间戳，不会下发给客户端。 */
   offlineSince?: number;
   /** 对局中途加入，下一局才自动进入当前游戏（仅当前对局有效）。 */
@@ -19,8 +17,6 @@ export type PublicPlayer = Omit<Player, "offlineSince">;
 export type PendingJoinRequest = {
   id: string;
   playerName: string;
-  /** 申请者在微信头像填写能力中主动选择的头像缩略图。 */
-  avatarData?: string;
   createdAt: number;
 };
 
