@@ -19,6 +19,12 @@ import { FlipText } from "./components/FlipText";
 
 type Screen = "home" | "create" | "join" | "lobby" | "game";
 
+// WebSocket readyState follows the web standard even when the Mini Program bridge
+// supplies the socket object. Do not read WebSocket.OPEN/CONNECTING here: WeChat
+// JSCore does not guarantee a browser-style global WebSocket constructor.
+const WS_CONNECTING = 0;
+const WS_OPEN = 1;
+
 type Room = PublicRoom & {
   localPlayerId: string;
 };
@@ -2082,7 +2088,7 @@ export default function Home() {
         // 主动离开的服务端确认（B023）：本地 goHome 已清理。
         return;
       case "ping":
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
+        if (wsRef.current?.readyState === WS_OPEN) {
           try {
             wsRef.current.send(JSON.stringify({ type: "pong" }));
           } catch {
@@ -2112,7 +2118,7 @@ export default function Home() {
       wsRef.current = null;
       socketSessionRef.current = null;
     }
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+    if (wsRef.current && (wsRef.current.readyState === WS_OPEN || wsRef.current.readyState === WS_CONNECTING)) {
       return;
     }
     sessionRef.current = session;
@@ -2201,7 +2207,7 @@ export default function Home() {
         setReconnectPhase("syncing");
         clearSyncTimer();
         syncTimer = window.setTimeout(() => {
-          if (wsRef.current !== ws || ws.readyState !== WebSocket.OPEN) return;
+          if (wsRef.current !== ws || ws.readyState !== WS_OPEN) return;
           console.warn("[TiGame] WebSocket opened but room sync timed out; reconnecting");
           try { ws.close(4000, "sync-timeout"); } catch {}
         }, 6_000);
@@ -2210,7 +2216,7 @@ export default function Home() {
         // 只在连接真正稳定后重置退避计数（B004）。
         if (stableTimerRef.current) window.clearTimeout(stableTimerRef.current);
         stableTimerRef.current = window.setTimeout(() => {
-          if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+          if (wsRef.current === ws && ws.readyState === WS_OPEN) {
             reconnectAttemptRef.current = 0;
           }
         }, 10_000);
@@ -2298,7 +2304,7 @@ export default function Home() {
   /** 等待服务器 ACK 的命令（4.3）：返回完整结果，区分“已确认/明确拒绝/结果未知”（P0-04 加固）。 */
   const sendCommandDetailed = useCallback((payload: Record<string, unknown>, options?: { id?: string }): Promise<CommandResult> => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WS_OPEN) {
       // 不在这里弹提示：自动重试会频繁命中此分支，通知由调用方决定。
       return Promise.resolve({ status: "unknown", reason: "DISCONNECTED" });
     }
@@ -2326,7 +2332,7 @@ export default function Home() {
   /** 布尔版 sendCommand：非转分命令沿用原语义（true=服务器已确认）。 */
   const sendCommand = useCallback((payload: Record<string, unknown>, options?: { id?: string }): Promise<boolean> => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WS_OPEN) {
       setNotice("连接已断开，操作未发送");
       return Promise.resolve(false);
     }
@@ -3781,7 +3787,7 @@ export default function Home() {
     const activeWs = wsRef.current;
     // 主动离开会尽量等服务器 ACK，但 UI 不能被网络/close 时序卡住 8 秒。
     // 1.2 秒足够正常链路完成确认；超时后仍立即清理本地会话。
-    if (sessionRef.current && activeWs?.readyState === WebSocket.OPEN) {
+    if (sessionRef.current && activeWs?.readyState === WS_OPEN) {
       await Promise.race([
         sendCommand({ type: "leave" }),
         new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 1_200)),
