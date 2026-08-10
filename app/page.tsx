@@ -3778,19 +3778,26 @@ export default function Home() {
     }, 1000);
   }, []);
 
-  // 飞行头像落地（或超时兜底）：隐藏中的玩家行播放弹出动效。
+  // 飞行头像落地（或超时兜底）：先露出目标玩家，再在下一帧移除飞行头像。
+  // Taro/小程序事件更新不保证像浏览器 React 那样完整批处理；如果先 setJoinFlight(null)，
+  // 目标行仍处于 player-incoming 的一帧里就会出现“头像突然消失”的空档。
+  // 这里让两枚头像在同一落点重叠一帧，以连续画面换掉空白帧。
   const completeIncomingJoin = useCallback((playerId: string) => {
     if (flightFallbackTimerRef.current) window.clearTimeout(flightFallbackTimerRef.current);
     flightFallbackTimerRef.current = undefined;
-    if (joinFlightRef.current?.id === playerId) {
-      joinFlightRef.current = null;
-      setJoinFlight(null);
-    }
+    const landedFlight = joinFlightRef.current?.id === playerId;
     if (incomingRef.current === playerId) {
       incomingRef.current = null;
       setIncomingId(null);
     }
     flashJustJoined(playerId);
+    if (landedFlight) {
+      window.requestAnimationFrame(() => {
+        if (joinFlightRef.current?.id !== playerId) return;
+        joinFlightRef.current = null;
+        setJoinFlight(null);
+      });
+    }
   }, [flashJustJoined]);
 
   // 申请行退场：先播放收起动画，动画结束（或超时）后从 DOM 移除。

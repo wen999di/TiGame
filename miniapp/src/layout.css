@@ -524,3 +524,56 @@
 }
 .miniapp-avatar-field .miniapp-profile-label { text-align: center; }
 .miniapp-avatar-button { margin-left: auto; margin-right: auto; }
+
+/* Mini Program game screens: the web mobile breakpoint is still too large for the
+ * usable WeChat viewport. Keep the same visual hierarchy, but tighten the vertical
+ * rhythm so the title, board and actions read as one screen instead of oversized sections. */
+.game-shell > .game-heading {
+  width: 100%;
+  margin: 28px auto 20px;
+}
+.game-shell > .game-heading h1,
+.game-shell > .game-heading .h5-h1 {
+  margin: 0;
+  font-size: 44px;
+  line-height: .96;
+  letter-spacing: -.055em;
+}
+.game-shell > .game-heading p,
+.game-shell > .game-heading .h5-p {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.game-shell .mahjong-card,
+.game-shell .mahjong-history,
+.game-shell .mahjong-settle,
+.game-shell .players-card,
+.game-shell .voting-card,
+.game-shell .round-result {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.game-shell .mahjong-card,
+.game-shell .mahjong-history,
+.game-shell .mahjong-settle {
+  padding: 18px 16px;
+}
+.game-shell .mahjong-board {
+  gap: 10px;
+  margin-top: 14px;
+}
+.game-shell .mahjong-tile {
+  gap: 7px;
+  padding: 14px 8px;
+  border-radius: 12px;
+}
+.game-shell .mahjong-tile-score { font-size: 26px; }
+.game-shell .game-bottom {
+  width: 100%;
+  gap: 12px;
+  margin-top: 20px;
+}
+.game-shell .game-bottom .vote-ready-wrap { width: 100%; }
+.game-shell .game-bottom .large-button { width: 100%; }
