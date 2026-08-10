@@ -15,10 +15,16 @@ import {
 } from "../app/game/undercover.ts";
 import { approveJoinRequest, backToLobby, createRoomState, enterGame, hostReturnToGame, hostToLobby, publicRoom, settleAfterRemoval } from "../app/game/room.ts";
 import { normalizeRoomId } from "../app/game/room-id.ts";
-import { decodeAvatarDeliveryFrame, decodeAvatarUploadFrame, encodeAvatarDeliveryFrame, encodeAvatarUploadFrame } from "../app/game/avatar-frame.ts";
+import { decodeAvatarDeliveryFrame, decodeAvatarUploadFrame, detectAvatarMime, encodeAvatarDeliveryFrame, encodeAvatarUploadFrame } from "../app/game/avatar-frame.ts";
 
 test("avatar websocket frames round-trip binary bytes without base64", () => {
   const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 1, 2, 3, 4]).buffer;
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).buffer;
+  const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50, 5]).buffer;
+  assert.equal(detectAvatarMime(jpeg), "image/jpeg");
+  assert.equal(detectAvatarMime(png), "image/png");
+  assert.equal(detectAvatarMime(webp), "image/webp");
+  assert.equal(encodeAvatarUploadFrame("image/jpeg", png), null);
   const upload = encodeAvatarUploadFrame("image/jpeg", jpeg);
   assert.ok(upload instanceof ArrayBuffer);
   const decodedUpload = decodeAvatarUploadFrame(upload);

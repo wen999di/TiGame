@@ -9,7 +9,7 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import { GAME_LIST, ROOM_MAX_PLAYERS, type GameId, type PendingJoinRequest, type Player, type PublicRoom } from "./game/room";
 import { ROOM_ID_PATTERN, normalizeRoomId } from "./game/room-id";
-import { decodeAvatarDeliveryFrame, encodeAvatarUploadFrame, type AvatarMime } from "./game/avatar-frame";
+import { decodeAvatarDeliveryFrame, detectAvatarMime, encodeAvatarUploadFrame, type AvatarMime } from "./game/avatar-frame";
 import { type SecretCard, type UndercoverPublicState, type UndercoverSettings } from "./game/undercover";
 import { type WordBankScope } from "./game/deal-cards";
 import { type ChallengePublicState, type ChallengeSettings } from "./game/challenge";
@@ -1831,8 +1831,18 @@ export default function Home() {
     setAvatarUrl(session.playerId, profile.avatarPath);
     try {
       const bytes = await bridge.readAvatarBinary(profile.avatarPath);
-      const frame = encodeAvatarUploadFrame(profile.avatarMime, bytes);
-      if (!frame || wsRef.current !== ws || ws.readyState !== WS_OPEN) return;
+      // 以实际文件魔数为准，兼容 v4 已缓存但 MIME 元数据不准确的头像。
+      const actualMime = detectAvatarMime(bytes);
+      if (!actualMime) {
+        console.warn("[TiGame] avatar upload skipped: unsupported image bytes");
+        return;
+      }
+      const frame = encodeAvatarUploadFrame(actualMime, bytes);
+      if (!frame) {
+        console.warn("[TiGame] avatar upload skipped: invalid binary frame");
+        return;
+      }
+      if (wsRef.current !== ws || ws.readyState !== WS_OPEN) return;
       ws.send(frame);
     } catch (error) {
       console.warn("[TiGame] avatar upload failed", error);
@@ -5263,9 +5273,9 @@ export default function Home() {
           <m.div
             key={`${screen}-${gamePhaseKey}`}
             className={`screen-motion screen-motion-${screen}`}
-            initial={{ opacity: 0, y: 14, scale: 0.995 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.995 }}
+            initial={{ opacity: 0, scale: 0.995 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.995 }}
             transition={motionTokens.screen}
           >
             {content}

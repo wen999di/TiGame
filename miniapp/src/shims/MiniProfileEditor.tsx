@@ -1,7 +1,7 @@
 import { Button, Image, Input, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { useEffect, useState } from "react";
-import { MAX_AVATAR_BYTES, type AvatarMime } from "../../../app/game/avatar-frame";
+import { MAX_AVATAR_BYTES, detectAvatarMime, type AvatarMime } from "../../../app/game/avatar-frame";
 
 const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v4";
 
@@ -80,13 +80,6 @@ async function localAvatarPath(source: string): Promise<string> {
   return source;
 }
 
-function normalizeMime(type: unknown): AvatarMime {
-  const value = String(type || "jpeg").toLowerCase();
-  if (value === "png") return "image/png";
-  if (value === "webp") return "image/webp";
-  return "image/jpeg";
-}
-
 function persistAvatarFile(tempFilePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     Taro.saveFile({
@@ -114,10 +107,13 @@ async function makeAvatarThumbnail(source: string): Promise<{ avatarPath: string
     });
     const bytes = await readAvatarBinary(compressed.tempFilePath);
     if (bytes.byteLength > MAX_AVATAR_BYTES) continue;
-    const info = await Taro.getImageInfo({ src: compressed.tempFilePath }).catch(() => null);
+    // 真机上 getImageInfo(tempFilePath).type 偶尔拿不到；直接按文件魔数判断，
+    // 避免把 PNG/WebP 误标成 JPEG 后被二进制协议校验静默拒绝。
+    const avatarMime = detectAvatarMime(bytes);
+    if (!avatarMime) continue;
     const avatarPath = await persistAvatarFile(compressed.tempFilePath);
     if (!avatarPath) continue;
-    return { avatarPath, avatarMime: normalizeMime(info?.type) };
+    return { avatarPath, avatarMime };
   }
   throw new Error("头像压缩后仍然过大，请换一张图片");
 }
