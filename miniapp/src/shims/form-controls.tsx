@@ -11,3 +11,5 @@ export function ActionForm({ className, children }: FormProps) {
 export function ActionButton({ className = "", disabled, onClick, children }: ButtonProps) {
   return <Button className={`tigame-native-button ${className}`.trim()} disabled={disabled} onClick={onClick as never}>{children}</Button>;
 }
+
+export { MiniProfileEditor } from "./MiniProfileEditor";

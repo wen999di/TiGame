@@ -2,9 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { createPortal } from "@tigame/portal";
-import { ActionButton, ActionForm } from "@tigame/form-controls";
+import { ActionButton, ActionForm, MiniProfileEditor } from "@tigame/form-controls";
 import { MiniQrCode } from "@tigame/mini-qr";
-import { MiniProfileEditor } from "@tigame/mini-profile";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";

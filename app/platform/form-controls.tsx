@@ -7,3 +7,5 @@ export function ActionForm(props: FormHTMLAttributes<HTMLFormElement>) {
 export function ActionButton(props: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} />;
 }
+
+export { MiniProfileEditor } from "./mini-profile";
