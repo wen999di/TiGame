@@ -577,3 +577,40 @@
 }
 .game-shell .game-bottom .vote-ready-wrap { width: 100%; }
 .game-shell .game-bottom .large-button { width: 100%; }
+
+/* Mahjong title: plugin-html maps semantic text tags to View-like nodes.
+ * Do not rely on browser <br> line-box behavior; make both title lines explicit blocks. */
+.mahjong-game-heading .h5-h1 {
+  display: block;
+  line-height: 1;
+}
+.mahjong-game-heading .h5-span,
+.mahjong-game-heading .h5-em {
+  display: block;
+  width: 100%;
+  line-height: 1;
+}
+.mahjong-game-heading .h5-br {
+  display: none;
+}
+.mahjong-game-heading .h5-em {
+  margin-top: 2px;
+}
+
+/* Mahjong board mirrors the web mobile two-column grid with deterministic widths.
+ * flex-grow must stay off: otherwise plugin-html button content can influence column width. */
+.game-shell .mahjong-board {
+  justify-content: space-between;
+  align-items: stretch;
+  column-gap: 0;
+  row-gap: 10px;
+}
+.game-shell .mahjong-board > .mahjong-tile {
+  box-sizing: border-box;
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: calc(50% - 5px);
+  width: calc(50% - 5px);
+  min-width: 0;
+  max-width: calc(50% - 5px);
+}

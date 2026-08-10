@@ -4974,7 +4974,7 @@ export default function Home() {
     const leaderIds = maxScore > 0 ? new Set(room.players.filter((player) => (game.scores[player.id] ?? 0) === maxScore).map((player) => player.id)) : null;
     return <main className="site-shell game-shell" key={screen}>
       {renderGameTopbar("麻将计分板")}
-      <section className="game-heading" key="mahjong"><h1><span>麻将</span><br /><em>计分板</em></h1><p>{game.phase === "SETTLING" ? "结账方案已生成，按下方头像顺序互相结算即可。" : "点击其他玩家的头像，输入要给出的分数。"}</p></section>
+      <section className="game-heading mahjong-game-heading" key="mahjong"><h1><span>麻将</span><br /><em>计分板</em></h1><p>{game.phase === "SETTLING" ? "结账方案已生成，按下方头像顺序互相结算即可。" : "点击其他玩家的头像，输入要给出的分数。"}</p></section>
       <section className="glass-card mahjong-card">
         <div className="card-header"><div><span className="section-kicker">当前分数</span></div><span className="mahjong-symbol" aria-hidden="true">🀄</span></div>
         <div className="mahjong-board">
