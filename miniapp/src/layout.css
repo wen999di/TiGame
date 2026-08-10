@@ -295,34 +295,46 @@
   flex-wrap: wrap;
 }
 
-.field-row > * { flex: 1 1 calc(50% - 7px); min-width: 0; }
-.segmented-control > *,
-.scope-options > *,
-.mahjong-keypad-grid > * { flex: 1 1 calc(33.333% - 7px); min-width: 0; }
+.field-row > .field,
+.field-row > .h5-label { flex: 1 1 calc(50% - 7px); min-width: 0; }
+.segmented-control > .h5-button,
+.scope-options > .scope-option,
+.mahjong-keypad-grid > .h5-button { flex: 1 1 calc(33.333% - 7px); min-width: 0; }
 .result-grid > .h5-div { flex: 1 1 calc(50% - 5px); min-width: 0; }
-.vote-avatars > * { flex: 1 1 calc(33.333% - 8px); min-width: 92px; }
-.challenge-table > * { flex: 1 1 calc(33.333% - 8px); min-width: 100px; }
-.mahjong-board > * { flex: 1 1 calc(50% - 6px); min-width: 0; }
-.game-list > * { flex: 1 1 100%; min-width: 0; }
+.vote-avatars > .h5-button,
+.vote-avatars > .vote-avatar { flex: 1 1 calc(33.333% - 8px); min-width: 92px; }
+.challenge-table > .challenge-card,
+.challenge-table > .h5-div { flex: 1 1 calc(33.333% - 8px); min-width: 100px; }
+.game-list > .game-card { flex: 1 1 100%; min-width: 0; }
 
-/* Three-column game topbar without CSS Grid. */
+/* Mini Program game topbar: keep the title centered independently of the
+ * WeChat menu capsule and of the web round-pop transform animation. */
 .game-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: relative;
 }
-
 .game-topbar-left,
 .game-topbar-right {
   flex: 1 1 0;
   min-width: 0;
+  position: relative;
+  z-index: 2;
 }
-
+.game-topbar-right { justify-content: flex-end; }
+.game-topbar-right .room-title { display: none; }
 .game-topbar .round-label {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: var(--tigame-menu-clearance, 96px);
+  z-index: 1;
+  margin: 0;
+  transform: none;
+  animation: none;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Modal centering without place-items. */
@@ -342,8 +354,6 @@
   width: 100%;
   align-items: stretch;
 }
-.lobby-grid > *,
-.lobby-side > *,
 .player-card,
 .settings-card,
 .invite-card,
@@ -358,7 +368,6 @@
   flex-direction: column;
   flex-wrap: nowrap;
 }
-.game-list > *,
 .game-list > .game-card,
 .game-card {
   flex: none;
@@ -581,13 +590,16 @@
 /* Mahjong title: plugin-html maps semantic text tags to View-like nodes.
  * Do not rely on browser <br> line-box behavior; make both title lines explicit blocks. */
 .mahjong-game-heading .h5-h1 {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   line-height: 1;
 }
 .mahjong-game-heading .h5-span,
 .mahjong-game-heading .h5-em {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   line-height: 1;
 }
 .mahjong-game-heading .h5-br {
@@ -613,4 +625,100 @@
   width: calc(50% - 5px);
   min-width: 0;
   max-width: calc(50% - 5px);
+}
+
+
+/* Mini Program gameplay parity fixes. */
+.game-shell .game-topbar-right .connection-pill { display: none; }
+.game-shell .mahjong-transfer-wrap {
+  height: auto;
+  overflow: visible;
+  transition: none;
+}
+.game-shell .mahjong-transfer-stage { padding-top: 16px; }
+.game-shell .mahjong-transfer {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: none;
+}
+.game-shell .mahjong-transfer-preparing,
+.game-shell .mahjong-transfer-expanding,
+.game-shell .mahjong-transfer-collapsing {
+  visibility: visible;
+}
+.game-shell .mahjong-transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.game-shell .mahjong-transfer-row .mahjong-adjust-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.game-shell .mahjong-transfer-row .mahjong-send-button-shell {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 46px;
+}
+.game-shell .mahjong-transfer-row .mahjong-send-button {
+  box-sizing: border-box;
+  width: 64px;
+  height: 46px;
+}
+.game-shell .mahjong-points-input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.mahjong-keypad-grid > .h5-button {
+  box-sizing: border-box;
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: calc(33.333% - 7px);
+  width: calc(33.333% - 7px);
+}
+.game-shell .secret-card-wrap,
+.game-shell .challenge-table-wrap,
+.game-shell .vote-ready-wrap,
+.game-shell .game-join-requests {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* Mini Program send trace: native View/CSS replacement for the web SVG runner. */
+.miniapp-mahjong-send-trace {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  bottom: -2px;
+  left: -2px;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: 11px;
+  pointer-events: none;
+  opacity: 0;
+}
+.miniapp-mahjong-send-trace-runner {
+  position: absolute;
+  left: -35%;
+  top: -35%;
+  width: 170%;
+  height: 170%;
+  border: 2px solid transparent;
+  border-top-color: #31dc78;
+  border-right-color: rgba(49, 220, 120, .55);
+  border-radius: 50%;
+}
+.mahjong-send-trace-active.miniapp-mahjong-send-trace { opacity: 1; }
+.mahjong-send-trace-active .miniapp-mahjong-send-trace-runner {
+  animation: miniapp-mahjong-send-trace-spin .72s linear infinite;
+}
+@keyframes miniapp-mahjong-send-trace-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

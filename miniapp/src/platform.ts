@@ -361,14 +361,22 @@ root.window ??= win;
 root.document ??= taroDocument;
 root.navigator ??= nav;
 
+let miniWindowInfo: { windowWidth: number; windowHeight: number } | null = null;
+try {
+  const info = Taro.getWindowInfo();
+  miniWindowInfo = { windowWidth: info.windowWidth, windowHeight: info.windowHeight };
+} catch {
+  miniWindowInfo = null;
+}
+
 function patchWindow(target: Record<string, any>) {
   target.localStorage = storage;
   target.isSecureContext = true;
   target.requestAnimationFrame ??= (callback: FrameRequestCallback) => target.setTimeout(() => callback(Date.now()), 16);
   target.cancelAnimationFrame ??= (id: number) => target.clearTimeout(id);
   target.scrollY ??= 0;
-  target.innerHeight ??= 800;
-  target.innerWidth ??= 375;
+  target.innerHeight = miniWindowInfo?.windowHeight ?? target.innerHeight ?? 800;
+  target.innerWidth = miniWindowInfo?.windowWidth ?? target.innerWidth ?? 375;
   target.scrollTo ??= () => {};
   target.matchMedia ??= (query: string) => ({
     matches: false,
@@ -395,6 +403,13 @@ function patchNavigator(target: Record<string, any>) {
 
 patchWindow(win);
 if (globalWin !== win) patchWindow(globalWin);
+Taro.onWindowResize?.(({ size }) => {
+  miniWindowInfo = { windowWidth: size.windowWidth, windowHeight: size.windowHeight };
+  win.innerWidth = size.windowWidth;
+  win.innerHeight = size.windowHeight;
+  globalWin.innerWidth = size.windowWidth;
+  globalWin.innerHeight = size.windowHeight;
+});
 patchNavigator(nav);
 if (globalNav !== nav) patchNavigator(globalNav);
 

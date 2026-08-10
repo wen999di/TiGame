@@ -1626,6 +1626,7 @@ export default function Home() {
   const mahjongKeypadOpenScrollYRef = useRef<number | null>(null);
   const mahjongKeypadRestoreScrollRef = useRef(true);
   // 桌面鼠标设备不弹自定义数字键盘，保持正常输入。
+  const isMiniProgram = getPlatformBridge()?.kind === "weapp";
   const [finePointer] = useState(() => typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches);
   // 转分发送状态机：idle 可编辑；sending/retrying 锁定并自动重试同一 operationId；
   // rejected 为服务端明确拒绝（恢复编辑，输入保留）。
@@ -3112,7 +3113,7 @@ export default function Home() {
 
   // 面板第一次挂载，或收起途中重新打开时，测量子卡片完整高度并展开空间。
   useLayoutEffect(() => {
-    if (transferPhase !== "preparing") return;
+    if (isMiniProgram || transferPhase !== "preparing") return;
 
     const slot = transferSlotRef.current;
     const stage = transferStageRef.current;
@@ -3135,11 +3136,11 @@ export default function Home() {
       setTransferPhase("expanding");
       slot.style.height = `${stage.scrollHeight}px`;
     });
-  }, [transferPhase, mahjongTarget, clearTransferRaf]);
+  }, [isMiniProgram, transferPhase, mahjongTarget, clearTransferRaf]);
 
   // 目标玩家在展开途中改变时，更新目标高度，避免昵称换行造成高度不准确。
   useLayoutEffect(() => {
-    if (transferPhase !== "expanding") return;
+    if (isMiniProgram || transferPhase !== "expanding") return;
 
     const slot = transferSlotRef.current;
     const stage = transferStageRef.current;
@@ -3147,9 +3148,13 @@ export default function Home() {
     if (!slot || !stage) return;
 
     slot.style.height = `${stage.scrollHeight}px`;
-  }, [transferPhase, mahjongTarget]);
+  }, [isMiniProgram, transferPhase, mahjongTarget]);
 
   const beginTransferCollapse = useCallback(() => {
+    if (isMiniProgram) {
+      finishTransferClose();
+      return;
+    }
     const slot = transferSlotRef.current;
 
     clearTransferRaf();
@@ -3177,13 +3182,20 @@ export default function Home() {
       setTransferPhase("collapsing");
       slot.style.height = "0px";
     });
-  }, [clearTransferRaf, finishTransferClose]);
+  }, [isMiniProgram, clearTransferRaf, finishTransferClose]);
 
   const closeMahjongTransfer = useCallback(() => {
     // 发送/重试期间锁定面板（整笔生命周期），防止收起后再次打开出现空输入。
     if (transferLockedRef.current) return;
     // 关闭面板时同步让数字键盘滑出。
     closeMahjongKeypad();
+
+    // 小程序没有浏览器 DOM 的 scrollHeight/transitionend 高度动画语义；
+    // 功能上直接关闭，避免状态机卡在 preparing/expanding。
+    if (isMiniProgram) {
+      finishTransferClose();
+      return;
+    }
 
     if (
       transferPhase === "closed" ||
@@ -3204,7 +3216,7 @@ export default function Home() {
 
     // 先让子卡片整体退出。
     setTransferPhase("exiting");
-  }, [transferPhase, beginTransferCollapse, closeMahjongKeypad]);
+  }, [isMiniProgram, transferPhase, beginTransferCollapse, closeMahjongKeypad, finishTransferClose]);
 
   const handleTransferSlotTransitionEnd = (
     event: React.TransitionEvent<HTMLDivElement>,
@@ -3235,7 +3247,7 @@ export default function Home() {
 
   // 子卡片出现时，如果其底部低于屏幕底部 10% 的位置，则平滑上移。
   useLayoutEffect(() => {
-    if (transferPhase !== "entering" && transferPhase !== "open") return;
+    if (isMiniProgram || (transferPhase !== "entering" && transferPhase !== "open")) return;
     const slot = transferSlotRef.current;
     if (!slot) return;
     const rect = slot.getBoundingClientRect();
@@ -3246,7 +3258,7 @@ export default function Home() {
         behavior: "smooth",
       });
     }
-  }, [transferPhase, mahjongTarget]);
+  }, [isMiniProgram, transferPhase, mahjongTarget]);
 
   const handleTransferPanelTransitionEnd = (
     event: React.TransitionEvent<HTMLDivElement>,
@@ -3281,7 +3293,7 @@ export default function Home() {
     if (switchingFromCollect) {
       closeMahjongKeypad();
       setMahjongTarget(playerId);
-      setTransferPhase("preparing");
+      setTransferPhase(isMiniProgram ? "open" : "preparing");
       return;
     }
     // 自己的牌已被禁用，不会触发；此处仅处理取消选中。
@@ -3291,7 +3303,7 @@ export default function Home() {
     }
     setMahjongTarget(playerId);
     if (transferPhase === "closed" || transferPhase === "collapsing") {
-      setTransferPhase("preparing");
+      setTransferPhase(isMiniProgram ? "open" : "preparing");
       return;
     }
     // 退出过程中选择另一个玩家：取消退出，从当前透明度平滑恢复。
@@ -3418,7 +3430,7 @@ export default function Home() {
       };
       setMahjongTarget(pending.targetId);
       setMahjongPoints(String(pending.points));
-      setTransferPhase((phase) => (phase === "closed" || phase === "collapsing" ? "preparing" : phase));
+      setTransferPhase((phase) => (phase === "closed" || phase === "collapsing" ? (isMiniProgram ? "open" : "preparing") : phase));
       setTransferState({ phase: "retrying", operationId: pending.operationId, targetId: pending.targetId, targetName: pending.targetName, points: pending.points, attempts: 1 });
       startTransferWarnTimers();
       void runTransferAttemptRef.current?.(pending, 1);
@@ -3456,7 +3468,7 @@ export default function Home() {
     // 先落 outbox 再发送：刷新/崩溃后可恢复同一 operationId 重试，不会重复计分。
     saveTransferToOutbox(operation);
     setMahjongTarget(targetId);
-    setTransferPhase((phase) => (phase === "closed" || phase === "collapsing" ? "preparing" : phase));
+    setTransferPhase((phase) => (phase === "closed" || phase === "collapsing" ? (isMiniProgram ? "open" : "preparing") : phase));
     startTransferWarnTimers();
     void runTransferAttempt(operation, 1);
   };
@@ -3483,7 +3495,7 @@ export default function Home() {
       // 复用给分面板的展开动效：切到收取模式并重新测量高度。
       setTransferMode("collect");
       setMahjongTarget("");
-      setTransferPhase("preparing");
+      setTransferPhase(isMiniProgram ? "open" : "preparing");
     }, 450);
   };
   const handleSelfTilePointerUp = () => {
@@ -3579,6 +3591,7 @@ export default function Home() {
 
   // 进入结账后自动滚动，让结算方案卡片接近视觉中心。
   useLayoutEffect(() => {
+    if (isMiniProgram) return;
     const game = room?.game;
     if (game?.kind !== "mahjong" || game.phase !== "SETTLING" || !game.settlement) {
       mahjongSettleScrolledRef.current = false;
@@ -3594,11 +3607,11 @@ export default function Home() {
     if (Math.abs(delta) > 4) {
       window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "smooth" });
     }
-  }, [room]);
+  }, [isMiniProgram, room]);
 
   // 数字键盘弹出后，把输入框平滑滚动到键盘上方并接近视觉中心。
   useLayoutEffect(() => {
-    if (!mahjongKeypadOpen) return;
+    if (isMiniProgram || !mahjongKeypadOpen) return;
     const input = document.querySelector(".mahjong-points-input");
     if (!input) return;
     const keypad = mahjongKeypadRef.current;
@@ -3611,7 +3624,7 @@ export default function Home() {
     if (Math.abs(delta) > 2) {
       window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "smooth" });
     }
-  }, [mahjongKeypadOpen]);
+  }, [isMiniProgram, mahjongKeypadOpen]);
 
   // 给分/收取共用的输入值 setter：按当前面板模式决定写哪个状态。
   const activePointsSetter = transferMode === "collect" ? setMahjongCollectPoints : setMahjongPoints;
@@ -3651,7 +3664,8 @@ export default function Home() {
     if (transferLockedRef.current || mahjongCollectSendingRef.current) return;
     // 触摸输入：阻止浏览器聚焦、弹出系统键盘与显示光标，
     // 避免长按调数被文本选择打断（不依赖 matchMedia(pointer:fine) 误判）。
-    if (event.pointerType === "touch") {
+    const touchLike = isMiniProgram || event.pointerType === "touch";
+    if (touchLike) {
       event.preventDefault();
     }
     const previous = mahjongSwipeRef.current;
@@ -3723,8 +3737,8 @@ export default function Home() {
       setMahjongAdjusting(false);
       // 松手时数值仍为 0，则自动清空。
       activePointsSetter((prev) => (prev === "0" ? "" : prev));
-    } else if (!swipe.moved && event.pointerType === "touch") {
-      // 触屏普通单击：打开网页内数字键盘；鼠标/触控笔保持原生输入。
+    } else if (!swipe.moved && (isMiniProgram || event.pointerType === "touch")) {
+      // 小程序事件不保证提供浏览器 pointerType；小程序明确按触屏处理。
       openMahjongKeypad();
     }
   };
@@ -3741,6 +3755,9 @@ export default function Home() {
 
   // 给分/收取面板打开时，点击其它区域即取消（两种模式共用同一收起动效）。
   useEffect(() => {
+    // 浏览器支持 document/closest 的全局点击外部收起；小程序 TaroElement 事件模型不同，
+    // 不挂全局监听，改由再次点击磁贴/完成操作显式关闭，避免输入框刚打开就被误收起。
+    if (isMiniProgram) return;
     const panelOpen = Boolean(mahjongTarget) || (transferMode === "collect" && transferPhase !== "closed");
     if (!panelOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -3750,7 +3767,7 @@ export default function Home() {
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [mahjongTarget, transferMode, transferPhase, closeMahjongTransfer]);
+  }, [isMiniProgram, mahjongTarget, transferMode, transferPhase, closeMahjongTransfer]);
 
   const toggleMahjongResetReady = () => {
     const game = roomRef.current?.game;
@@ -5062,7 +5079,7 @@ export default function Home() {
                       <span className="field-label">向所有人收取的分数</span>
                       <div className="mahjong-transfer-row">
                         <span className="mahjong-adjust-wrap">
-                          <input className={`text-input mahjong-points-input${mahjongAdjusting ? " mahjong-adjust-active" : ""}${!parseMahjongPoints(mahjongCollectPoints).ok && mahjongCollectPoints ? " input-error" : ""}`} type="number" min={1} max={99999} inputMode={finePointer ? "numeric" : "none"} readOnly={!finePointer || mahjongCollectSending} value={mahjongCollectPoints} aria-label="向所有人收取的分数" onChange={(event) => { if (!mahjongCollectSending) setMahjongCollectPoints(event.target.value); }} onPointerDown={handleMahjongPointsPointerDown} onPointerMove={handleMahjongPointsPointerMove} onPointerUp={handleMahjongPointsPointerUp} onPointerCancel={handleMahjongPointsPointerCancel} onContextMenu={(event) => event.preventDefault()} />
+                          <input className={`text-input mahjong-points-input${mahjongAdjusting ? " mahjong-adjust-active" : ""}${!parseMahjongPoints(mahjongCollectPoints).ok && mahjongCollectPoints ? " input-error" : ""}`} type="number" min={1} max={99999} inputMode={finePointer ? "numeric" : "none"} readOnly={!finePointer || mahjongCollectSending} value={mahjongCollectPoints} aria-label="向所有人收取的分数" onChange={(event) => { if (!mahjongCollectSending) setMahjongCollectPoints(event.target.value); }} onClick={() => { if (isMiniProgram && !mahjongCollectSending) openMahjongKeypad(); }} onPointerDown={handleMahjongPointsPointerDown} onPointerMove={handleMahjongPointsPointerMove} onPointerUp={handleMahjongPointsPointerUp} onPointerCancel={handleMahjongPointsPointerCancel} onContextMenu={(event) => event.preventDefault()} />
                           {mahjongRipple && <span key={mahjongRipple.key} className={`mahjong-adjust-ripple mahjong-adjust-ripple-${mahjongRipple.phase}`} onAnimationEnd={() => setMahjongRipple(null)} />}
                         </span>
                         <span className="mahjong-send-button-shell">
@@ -5079,7 +5096,7 @@ export default function Home() {
                       <span className="field-label">给 {targetPlayer.name} 的分数</span>
                   <div className="mahjong-transfer-row">
                     <span className="mahjong-adjust-wrap">
-                      <input className={`text-input mahjong-points-input${mahjongAdjusting ? " mahjong-adjust-active" : ""}${!pointsValidation.ok && mahjongPoints ? " input-error" : ""}`} type="number" min={1} max={99999} inputMode={finePointer ? "numeric" : "none"} readOnly={!finePointer || transferBusy} value={mahjongPoints} aria-label="分数" onChange={(event) => { if (!transferBusy) setMahjongPoints(event.target.value); }} onPointerDown={handleMahjongPointsPointerDown} onPointerMove={handleMahjongPointsPointerMove} onPointerUp={handleMahjongPointsPointerUp} onPointerCancel={handleMahjongPointsPointerCancel} onContextMenu={(event) => event.preventDefault()} />
+                      <input className={`text-input mahjong-points-input${mahjongAdjusting ? " mahjong-adjust-active" : ""}${!pointsValidation.ok && mahjongPoints ? " input-error" : ""}`} type="number" min={1} max={99999} inputMode={finePointer ? "numeric" : "none"} readOnly={!finePointer || transferBusy} value={mahjongPoints} aria-label="分数" onChange={(event) => { if (!transferBusy) setMahjongPoints(event.target.value); }} onClick={() => { if (isMiniProgram && !transferBusy) openMahjongKeypad(); }} onPointerDown={handleMahjongPointsPointerDown} onPointerMove={handleMahjongPointsPointerMove} onPointerUp={handleMahjongPointsPointerUp} onPointerCancel={handleMahjongPointsPointerCancel} onContextMenu={(event) => event.preventDefault()} />
                       {mahjongRipple && <span key={mahjongRipple.key} className={`mahjong-adjust-ripple mahjong-adjust-ripple-${mahjongRipple.phase}`} onAnimationEnd={() => setMahjongRipple(null)} />}
                     </span>
                     <span className="mahjong-send-button-shell">

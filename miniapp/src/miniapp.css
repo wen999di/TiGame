@@ -48,5 +48,4 @@ body, #app, .taro_page, .screen-motion {
 /* Taro 小程序端使用原生扫码，不渲染 Web 摄像头层。 */
 .camera-overlay { display: none !important; }
 
-/* 小程序端不支持 SVG；发送按钮仍保留完整交互，省略纯装饰描边。 */
-.mahjong-send-trace { display: none !important; }
+/* 小程序端发送描边由原生 View/CSS shim 实现，不使用 Web SVG。 */
