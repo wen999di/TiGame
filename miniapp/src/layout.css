@@ -437,3 +437,66 @@
 .resume-banner {
   top: calc(var(--tigame-status-bar-height, 24px) + var(--tigame-nav-height, 52px) + 8px);
 }
+
+/* Mini Program home: match the web badge while fitting exactly inside the viewport. */
+.home-shell {
+  height: calc(100vh - var(--tigame-status-bar-height, 24px));
+  min-height: 0;
+  padding: 10px 12px 12px;
+  overflow: hidden;
+}
+.home-shell .home-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  box-sizing: border-box;
+}
+.home-shell .topbar {
+  flex: 0 0 var(--tigame-nav-height, 52px);
+  padding-left: 0;
+  padding-right: var(--tigame-menu-clearance, 96px);
+  justify-content: flex-start;
+}
+.home-shell .room-badge {
+  display: flex;
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  border: 1px solid rgba(245, 235, 221, 0.48);
+  border-radius: 999px;
+  padding: 8px 11px;
+}
+.home-shell .room-badge > .h5-span { white-space: nowrap; }
+.home-shell .home-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.home-shell .page-note { display: none; }
+
+/* Native View-backed cards need their own box sizing; plugin-html's h5 reset does not cover them. */
+.form-card,
+.join-card,
+.miniapp-profile-editor,
+.miniapp-nickname-field {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.miniapp-profile-editor { overflow: hidden; }
+.miniapp-avatar-field {
+  box-sizing: border-box;
+  width: 92px;
+  max-width: 100%;
+  min-width: 0;
+}
+.miniapp-avatar-button {
+  box-sizing: border-box;
+  flex: none;
+  max-width: 82px;
+}

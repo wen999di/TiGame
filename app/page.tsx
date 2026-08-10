@@ -3946,11 +3946,17 @@ export default function Home() {
   const handleMiniProfileChange = useCallback((profile: TiGameUserProfile | null) => {
     setPlatformProfile(profile);
     const nickname = profile?.nickname?.trim().slice(0, 12) || "";
-    if (nickname) {
-      setForm({ name: nickname });
-      setJoinName(nickname);
-    }
+    // 小程序资料为空时也要清掉共享表单里的旧昵称，避免历史缓存（如“微信用户”）
+    // 让下一步按钮误判为已经完成资料填写。
+    setForm({ name: nickname });
+    setJoinName(nickname);
   }, []);
+
+  const miniProfileReady = Boolean(
+    platformProfile?.avatarData
+    && platformProfile.nickname?.trim()
+    && platformProfile.nickname.trim() !== "微信用户",
+  );
 
   const ensurePlatformProfile = async (): Promise<TiGameUserProfile | null> => {
     const bridge = getPlatformBridge();
@@ -4186,7 +4192,7 @@ export default function Home() {
             className="button button-primary form-submit"
             type="submit"
             onClick={getPlatformBridge()?.kind === "weapp" ? () => void createRoom() : undefined}
-            disabled={creatingRoom}
+            disabled={creatingRoom || (getPlatformBridge()?.kind === "weapp" && !miniProfileReady)}
           >{creatingRoom ? "正在创建…" : "创建房间"} {!creatingRoom && <span>↗</span>}</ActionButton>
         </ActionForm>
       </section>
@@ -4222,7 +4228,7 @@ export default function Home() {
               <label className="field-label" htmlFor="join-name">昵称</label>
               <input id="join-name" className="text-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} maxLength={12} autoFocus />
             </>)}
-            <button className="button button-primary form-submit" type="button" onClick={requestToJoin} disabled={joinStatus === "submitting"}>{joinStatus === "submitting" ? "正在发送…" : "申请加入"} <span>→</span></button>
+            <ActionButton className="button button-primary form-submit" type="button" onClick={requestToJoin} disabled={joinStatus === "submitting" || (getPlatformBridge()?.kind === "weapp" && !miniProfileReady)}>{joinStatus === "submitting" ? "正在发送…" : "申请加入"} <span>→</span></ActionButton>
           </div>}
           {joinStep === 2 && <div className="join-confirm response-confirm">
             <span className="waiting-seal"><i /></span><span className="eyebrow">申请已发送</span>

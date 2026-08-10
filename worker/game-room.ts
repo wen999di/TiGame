@@ -153,10 +153,10 @@ function nameCompareKey(name: string): string {
   }
 }
 
-/** 微信头像只作为房间内展示用的小缩略图。客户端会先压缩到约 40–56px；
+/** 微信头像只作为房间内展示用的缩略图。客户端会先压缩到约 64–96px；
  * 服务端再次做协议/长度校验，避免把任意超大 data URL 塞进 Durable Object 快照。 */
 function sanitizeAvatarData(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0 || value.length > 4_096) return undefined;
+  if (typeof value !== "string" || value.length === 0 || value.length > 8_192) return undefined;
   if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(value)) return undefined;
   return value;
 }

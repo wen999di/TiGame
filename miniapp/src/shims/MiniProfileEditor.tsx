@@ -13,14 +13,15 @@ type MiniProfileEditorProps = {
 };
 
 
-const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v2";
-const AVATAR_DATA_MAX = 4096;
+const WECHAT_PROFILE_STORAGE_KEY = "tigame:wechat-profile:v3";
+const AVATAR_DATA_MAX = 8192;
 
 function readProfileDraft(): Partial<MiniProfile> {
   try {
     const value = Taro.getStorageSync(WECHAT_PROFILE_STORAGE_KEY) as Partial<MiniProfile> | string | undefined;
     const parsed = typeof value === "string" ? JSON.parse(value) as Partial<MiniProfile> : value;
-    const nickname = typeof parsed?.nickname === "string" ? parsed.nickname.trim().slice(0, 12) : "";
+    const rawNickname = typeof parsed?.nickname === "string" ? parsed.nickname.trim().slice(0, 12) : "";
+    const nickname = rawNickname === "微信用户" ? "" : rawNickname;
     const avatarData = typeof parsed?.avatarData === "string" ? parsed.avatarData : "";
     return { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
   } catch {
@@ -32,7 +33,8 @@ function saveProfileDraft(changes: Partial<MiniProfile>): Partial<MiniProfile> {
   const current = readProfileDraft();
   const nicknameSource = changes.nickname === undefined ? current.nickname : changes.nickname;
   const avatarSource = changes.avatarData === undefined ? current.avatarData : changes.avatarData;
-  const nickname = typeof nicknameSource === "string" ? nicknameSource.trim().slice(0, 12) : "";
+  const rawNickname = typeof nicknameSource === "string" ? nicknameSource.trim().slice(0, 12) : "";
+  const nickname = rawNickname === "微信用户" ? "" : rawNickname;
   const avatarData = typeof avatarSource === "string" ? avatarSource : "";
   const next = { ...(nickname ? { nickname } : {}), ...(avatarData ? { avatarData } : {}) };
   Taro.setStorageSync(WECHAT_PROFILE_STORAGE_KEY, next);
@@ -66,9 +68,10 @@ async function localAvatarPath(source: string): Promise<string> {
 async function makeAvatarThumbnail(source: string): Promise<string> {
   const localSource = await localAvatarPath(source);
   const attempts = [
-    { size: 48, quality: 58 },
-    { size: 36, quality: 42 },
-    { size: 32, quality: 32 },
+    { size: 96, quality: 68 },
+    { size: 80, quality: 58 },
+    { size: 72, quality: 50 },
+    { size: 64, quality: 46 },
   ];
   for (const attempt of attempts) {
     const compressed = await Taro.compressImage({
@@ -133,7 +136,7 @@ export function MiniProfileEditor({ profile, onProfileChange }: MiniProfileEdito
   return (
     <View className="miniapp-profile-editor">
       <View className="miniapp-avatar-field">
-        <Text className="miniapp-profile-label">微信头像</Text>
+        <Text className="miniapp-profile-label">头像</Text>
         <Button
           className={`miniapp-avatar-button${draft.avatarData ? " has-avatar" : ""}`}
           openType="chooseAvatar"
@@ -149,17 +152,16 @@ export function MiniProfileEditor({ profile, onProfileChange }: MiniProfileEdito
         <Text className="miniapp-profile-help">{avatarBusy ? "正在处理头像…" : "点击头像选择微信头像"}</Text>
       </View>
       <View className="miniapp-nickname-field">
-        <Text className="miniapp-profile-label">微信昵称</Text>
+        <Text className="miniapp-profile-label">昵称</Text>
         <Input
           className="miniapp-nickname-input"
           type="nickname"
           value={draft.nickname}
           maxlength={12}
-          placeholder="点击选择或填写微信昵称"
+          placeholder="点击输入框选择微信昵称"
           onInput={updateNickname as never}
           confirmType="done"
         />
-        <Text className="miniapp-profile-help">点击输入框后可使用微信提供的昵称</Text>
       </View>
     </View>
   );
